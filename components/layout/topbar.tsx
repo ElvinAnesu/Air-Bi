@@ -15,8 +15,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { mockConnections } from "@/lib/mock-data"
-import { Menu, Moon, Plus, Search, Sun } from "lucide-react"
+import { useActiveConnection } from "@/lib/context/active-connection"
+import { useAuth } from "@/lib/context/auth-context"
+import { LogOut, Menu, Moon, Plus, Search, Sun } from "lucide-react"
 
 const titles: Record<string, string> = {
   "/": "New chat",
@@ -37,17 +38,13 @@ function useDarkModeToggle() {
   return { isDark, toggle: () => setIsDark((d) => !d) }
 }
 
-export function Topbar({
-  onMenuClick,
-  connectionLabel = "SAP B1 LIVE",
-}: {
-  onMenuClick?: () => void
-  connectionLabel?: string
-}) {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname()
+  const { connections } = useActiveConnection()
+
   const connectionDetailTitle =
     pathname?.startsWith("/connections/") && pathname !== "/connections"
-      ? mockConnections.find((c) => pathname === `/connections/${c.id}`)?.name
+      ? connections.find((c) => pathname === `/connections/${c.id}`)?.name
       : undefined
 
   const title =
@@ -55,7 +52,13 @@ export function Topbar({
     connectionDetailTitle ??
     (pathname?.startsWith("/chats") ? titles["/chats"] : undefined) ??
     "AirBI"
+  const { activeConnection } = useActiveConnection()
+  const { user, teamName, signOut } = useAuth()
   const { isDark, toggle } = useDarkModeToggle()
+
+  const initials = user?.fullName
+    ? user.fullName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
+    : (user?.email?.[0] ?? "?").toUpperCase()
 
   return (
     <header className="border-border/60 flex h-14 items-center gap-3 border-b bg-black/20 px-3 backdrop-blur-xl md:px-4">
@@ -93,12 +96,14 @@ export function Topbar({
         >
           <Plus className="size-4" />
         </Button>
-        <Badge
-          variant="outline"
-          className="hidden border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-200 sm:inline-flex"
-        >
-          {connectionLabel}
-        </Badge>
+        {activeConnection && (
+          <Badge
+            variant="outline"
+            className="hidden border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-200 sm:inline-flex"
+          >
+            {activeConnection.name}
+          </Badge>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -112,14 +117,25 @@ export function Topbar({
         <DropdownMenu>
           <DropdownMenuTrigger className="ring-offset-background focus-visible:ring-ring rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2">
             <Avatar className="size-8 border border-white/10">
-              <AvatarFallback className="text-xs">JL</AvatarFallback>
+              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-48 rounded-xl" align="end">
+          <DropdownMenuContent className="w-52 rounded-xl" align="end">
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs">Jordan Lee</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs">
+                <span className="block truncate font-medium">{user?.fullName ?? user?.email}</span>
+                {teamName && (
+                  <span className="block truncate text-[10px] font-normal text-muted-foreground">{teamName}</span>
+                )}
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer text-destructive focus:text-destructive"
+                onClick={() => signOut()}
+              >
+                <LogOut className="mr-2 size-3.5" />
+                Sign out
+              </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>

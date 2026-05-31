@@ -2,23 +2,35 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import type { ErpConnection, ErpTable, SchemaTableSummary } from "@/types"
 import {
+  deleteConnection,
   fetchConnection,
   fetchConnectionSchema,
   fetchTablePreview,
+  syncConnection,
 } from "@/lib/api/connections"
+import { ConnectionForm } from "@/components/connection/connection-form"
 import { ConnectionStatusBadge } from "@/components/connection/connection-status-badge"
 import { ConnectionDetailActions } from "@/components/connection/connection-detail-actions"
 import { SchemaExplorerSidebar } from "@/components/database/schema-explorer-sidebar"
 import { TableDetailView } from "@/components/database/table-detail-view"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { ArrowLeft, Loader2, PanelLeft } from "lucide-react"
 
 export default function ConnectionDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const id = typeof params.id === "string" ? params.id : ""
 
   const [connection, setConnection] = useState<ErpConnection | null>(null)
@@ -34,6 +46,11 @@ export default function ConnectionDetailPage() {
   const [tableError, setTableError] = useState<string | null>(null)
 
   const [schemaDrawerOpen, setSchemaDrawerOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const catalogName = connection ? `${connection.name} · ${connection.erpType}` : ""
 
@@ -90,6 +107,34 @@ export default function ConnectionDetailPage() {
     }
   }
 
+  const handleSync = async () => {
+    if (!id) return
+    setSyncing(true)
+    setActionError(null)
+    try {
+      const updated = await syncConnection(id)
+      setConnection(updated)
+      await loadSchema()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Sync failed")
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!id) return
+    setDeleting(true)
+    setActionError(null)
+    try {
+      await deleteConnection(id)
+      router.push("/connections")
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Delete failed")
+      setDeleting(false)
+    }
+  }
+
   if (connectionLoading) {
     return (
       <p className="text-muted-foreground flex items-center gap-2 px-4 py-8 text-sm">
@@ -124,7 +169,7 @@ export default function ConnectionDetailPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem-2rem)] flex-col md:min-h-[calc(100dvh-3.5rem-3rem)] -mx-4 -mb-4 md:-mx-6 md:-mb-6">
+    <div className="flex h-full flex-col">
       <header className="border-border/60 flex shrink-0 flex-wrap items-center gap-3 border-b bg-black/10 px-4 py-3">
         <Link
           href="/connections"
@@ -134,7 +179,13 @@ export default function ConnectionDetailPage() {
           <ArrowLeft className="size-4" />
         </Link>
         <ConnectionStatusBadge status={connection.status} />
-        <ConnectionDetailActions />
+        <ConnectionDetailActions
+          onEdit={() => setEditOpen(true)}
+          onSync={() => void handleSync()}
+          onDelete={() => setDeleteOpen(true)}
+          syncing={syncing}
+          deleting={deleting}
+        />
         <Button
           type="button"
           variant="outline"
@@ -150,6 +201,10 @@ export default function ConnectionDetailPage() {
           <p className="text-muted-foreground truncate text-xs">{connection.erpType}</p>
         </div>
       </header>
+
+      {actionError && (
+        <p className="text-destructive border-border/60 border-b px-4 py-2 text-sm">{actionError}</p>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <SchemaExplorerSidebar className="hidden lg:flex" collapsible {...sidebarProps} />
@@ -178,6 +233,47 @@ export default function ConnectionDetailPage() {
           )}
         </div>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl border-white/10 bg-zinc-950 p-0">
+          <ConnectionForm
+            mode="edit"
+            connectionId={connection.id}
+            initialValues={{
+              name: connection.name,
+              server: connection.server ?? "",
+              database: connection.database ?? "",
+              user: connection.username ?? "",
+            }}
+            onCancel={() => setEditOpen(false)}
+            onSaved={(updated) => {
+              setConnection(updated)
+              setEditOpen(false)
+            }}
+            className="border-0 bg-transparent ring-0"
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete connection?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove &quot;{connection.name}&quot; from your team workspace. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
+              {deleting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

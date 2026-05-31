@@ -1,83 +1,18 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import type { ChatMessageModel } from "@/types"
-import {
-  mockBarChart,
-  mockPieChart,
-  mockQueryColumns,
-  mockQueryRows,
-  mockRevenueSeries,
-  suggestedPrompts,
-} from "@/lib/mock-data"
+import { useActiveConnection } from "@/lib/context/active-connection"
+import { useUI } from "@/lib/context/ui-context"
 import { ChatMessage } from "@/components/chat/chat-message"
-import { ChatInput } from "@/components/chat/chat-input"
-import { SuggestedPrompts } from "@/components/chat/suggested-prompts"
-import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChatInput, type SelectedTable } from "@/components/chat/chat-input"
+import { ReportPanel, type ReportData } from "@/components/workspace/report-panel"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { ResultBarChart, ResultPieChart } from "@/components/charts/result-charts"
-import { RevenueChart } from "@/components/dashboard/revenue-chart"
-import { ChevronDown, Download, Filter, Sparkles } from "lucide-react"
+import { Sparkles, AlertCircle } from "lucide-react"
 
-function buildAssistantMessage(prompt: string): ChatMessageModel {
-  const p = prompt.toLowerCase()
-  if (p.includes("overdue")) {
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content:
-        "There are **14 overdue invoices** totaling **$186,420** on OINV with DocStatus open and due dates before today.",
-      summary: "Overdue A/R: **$186,420** across **14** invoices",
-      sql: `SELECT COUNT(*) AS Cnt, SUM(DocTotal) AS OpenTotal
-FROM OINV
-WHERE DocStatus = 'O' AND DocDueDate < CAST(GETDATE() AS DATE);`,
-      chart: "bar",
-    }
-  }
-  if (p.includes("customer")) {
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content:
-        "**Northwind Logistics** leads this month with **$842k** invoiced revenue, followed by Atlas Manufacturing at **$512k**.",
-      summary: "Top customer: **Northwind Logistics**",
-      sql: `SELECT TOP 5 CardCode, SUM(DocTotal) AS Revenue
-FROM OINV
-WHERE MONTH(DocDate) = MONTH(GETDATE())
-GROUP BY CardCode
-ORDER BY Revenue DESC;`,
-      chart: "pie",
-    }
-  }
-  if (p.includes("inventory") || p.includes("discrepanc")) {
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content:
-        "OITM shows **5 SKUs** below reorder point in the main warehouse. Largest gap: **SKU-7720** (−12 units vs target).",
-      summary: "**5** inventory alerts in WH-01",
-      sql: `SELECT ItemCode, OnHand, MinStock
-FROM OITM
-WHERE OnHand < MinStock;`,
-      chart: "bar",
-    }
-  }
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content:
-      "Based on incoming payments posted today, **cash and transfers total $24,320** across ORCT. This is **+12%** vs the same weekday last week.",
-    summary: "Received today: **$24,320**",
-    sql: `SELECT SUM(CashSum + TrsfrSum + CheckSum) AS ReceivedToday
-FROM ORCT
-WHERE DocDate = CAST(GETDATE() AS DATE);`,
-    chart: "line",
-  }
+type ConversationTurn = {
+  role: "user" | "assistant"
+  content: string
 }
 
 function greetingLine() {
@@ -85,226 +20,284 @@ function greetingLine() {
   if (h < 5) return "Still up?"
   if (h < 12) return "Good morning"
   if (h < 17) return "Good afternoon"
-  if (h < 22) return "Good evening"
   return "Good evening"
 }
 
-export function WorkspaceView() {
-  const [messages, setMessages] = useState<ChatMessageModel[]>([])
+function truncate(text: string, max = 55): string {
+  return text.length <= max ? text : text.slice(0, max).trimEnd() + "…"
+}
+
+type WorkspaceViewProps = {
+  initialMessages?: ChatMessageModel[]
+  initialChatId?: string
+}
+
+export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewProps = {}) {
+  const { activeConnection } = useActiveConnection()
+  const { autoCollapse } = useUI()
+  const [messages, setMessages] = useState<ChatMessageModel[]>(initialMessages ?? [])
   const [busy, setBusy] = useState(false)
-  const [typingId, setTypingId] = useState<string | null>(null)
-  const [thinking, setThinking] = useState(false)
-  const [showSqlDefault, setShowSqlDefault] = useState(true)
-  const [page, setPage] = useState(1)
-  const [downloadNote, setDownloadNote] = useState<string | null>(null)
-  const pageSize = 2
-  const totalPages = Math.max(1, Math.ceil(mockQueryRows.length / pageSize))
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize
-    return mockQueryRows.slice(start, start + pageSize)
-  }, [page])
+  const [report, setReport] = useState<ReportData | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const conversationRef = useRef<ConversationTurn[]>(
+    // Rebuild conversation history from initial messages so Claude has context
+    (initialMessages ?? []).map((m) => ({ role: m.role, content: m.content }))
+  )
+  const chatIdRef = useRef<string | null>(initialChatId ?? null)
+  // Track which message IDs are already persisted to avoid re-saving
+  const savedMsgIds = useRef<Set<string>>(
+    new Set((initialMessages ?? []).map((m) => m.id))
+  )
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   const hasConversation = messages.length > 0
-  const showResultsPanel = messages.some((m) => m.role === "assistant")
+
+  const persistChat = useCallback(
+    async (updatedMessages: ChatMessageModel[]) => {
+      const firstUser = updatedMessages.find((m) => m.role === "user")
+      if (!firstUser) return
+
+      // Create the chat row on first save
+      if (!chatIdRef.current) {
+        try {
+          const res = await fetch("/api/chats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: truncate(firstUser.content),
+              connectionId: activeConnection?.id ?? null,
+            }),
+          })
+          if (res.ok) {
+            const chat = await res.json()
+            chatIdRef.current = chat.id
+          }
+        } catch { /* ignore — chat data stays in memory */ }
+      }
+
+      if (!chatIdRef.current) return
+
+      // Save only messages not yet persisted
+      const newMsgs = updatedMessages.filter((m) => !savedMsgIds.current.has(m.id))
+      if (newMsgs.length === 0) return
+
+      try {
+        const res = await fetch(`/api/chats/${chatIdRef.current}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: newMsgs.map((m) => ({ role: m.role, content: m.content })),
+          }),
+        })
+        if (res.ok) {
+          newMsgs.forEach((m) => savedMsgIds.current.add(m.id))
+        }
+      } catch { /* ignore */ }
+    },
+    [activeConnection]
+  )
 
   const sendPrompt = useCallback(
-    (text: string) => {
+    async (text: string, selectedTables: SelectedTable[]) => {
       const trimmed = text.trim()
       if (!trimmed || busy) return
+
+      setError(null)
+
       const userMsg: ChatMessageModel = {
         id: crypto.randomUUID(),
         role: "user",
         content: trimmed,
       }
-      setMessages((m) => [...m, userMsg])
-      setBusy(true)
-      setThinking(true)
 
-      window.setTimeout(() => {
-        const assistant = buildAssistantMessage(trimmed)
-        setMessages((m) => [...m, assistant])
-        setThinking(false)
+      const nextMessages = [...messages, userMsg]
+      setMessages(nextMessages)
+      setBusy(true)
+      setReportLoading(true)
+      autoCollapse()
+
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+
+      // Persist chat immediately with user message
+      persistChat(nextMessages)
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: trimmed,
+            connectionId: activeConnection?.id ?? "",
+            selectedTables,
+            conversationHistory: conversationRef.current,
+          }),
+        })
+
+        const data = (await res.json()) as {
+          type?: "clarify" | "report"
+          message?: string
+          title?: string
+          explanation?: string
+          sql?: string
+          chartType?: "bar" | "pie" | "line" | "table"
+          columns?: string[]
+          rows?: Record<string, string | number | null>[]
+          rowCount?: number
+          error?: string
+        }
+
+        if (!res.ok || data.error) {
+          throw new Error(data.error ?? "Something went wrong")
+        }
+
+        // ── Clarify: Claude asked questions, no report yet ──────────────────
+        if (data.type === "clarify") {
+          const assistantContent = data.message ?? "Could you provide more details?"
+          const assistantMsg: ChatMessageModel = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: assistantContent,
+          }
+          const withAssistant = [...nextMessages, assistantMsg]
+          setMessages(withAssistant)
+          conversationRef.current = [
+            ...conversationRef.current,
+            { role: "user", content: trimmed },
+            { role: "assistant", content: assistantContent },
+          ]
+          persistChat(withAssistant)
+          return
+        }
+
+        // ── Report: Claude generated SQL and it was executed ────────────────
+        const assistantContent = data.explanation ?? "Report generated."
+        const assistantMsg: ChatMessageModel = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: assistantContent,
+        }
+
+        const withAssistant = [...nextMessages, assistantMsg]
+        setMessages(withAssistant)
+
+        conversationRef.current = [
+          ...conversationRef.current,
+          { role: "user", content: trimmed },
+          { role: "assistant", content: assistantContent },
+        ]
+
+        const reportData: ReportData = {
+          title: data.title ?? "Report",
+          explanation: data.explanation ?? "",
+          sql: data.sql ?? "",
+          chartType: data.chartType ?? "table",
+          columns: data.columns ?? [],
+          rows: data.rows ?? [],
+          rowCount: data.rowCount ?? 0,
+          connectionName: activeConnection?.name,
+        }
+        setReport(reportData)
+
+        // Persist updated chat with assistant reply
+        persistChat(withAssistant)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "An unexpected error occurred"
+        setError(msg)
+        const errMsg: ChatMessageModel = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Sorry, I ran into an error: ${msg}`,
+        }
+        const withErr = [...nextMessages, errMsg]
+        setMessages(withErr)
+        persistChat(withErr)
+      } finally {
         setBusy(false)
-        setTypingId(assistant.id)
-        window.setTimeout(() => setTypingId(null), Math.min(4000, 800 + assistant.content.length * 8))
-      }, 900)
+        setReportLoading(false)
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+      }
     },
-    [busy]
+    [busy, activeConnection, autoCollapse, messages, persistChat]
   )
 
-  return (
-    <div className="flex min-h-[calc(100dvh-7.5rem)] flex-col">
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 md:px-4">
-        <ScrollArea className="min-h-0 flex-1 [--radix-scroll-area-corner-width:0px]">
-          <div className={hasConversation ? "pb-6 pt-2" : ""}>
-            {!hasConversation ? (
-              <div className="flex flex-col items-center px-2 pt-8 text-center md:pt-14">
-                <div className="mb-6 flex flex-col items-center gap-4 md:flex-row md:gap-5">
-                  <Sparkles className="size-9 shrink-0 text-amber-400/90 md:size-10" strokeWidth={1.25} />
-                  <h1 className="font-serif text-[1.65rem] font-normal tracking-tight text-foreground md:text-4xl md:leading-tight">
-                    {greetingLine()}
-                  </h1>
-                </div>
-                <p className="text-muted-foreground max-w-md text-sm leading-relaxed md:text-[0.9375rem]">
-                  Talk to your database in plain language. AirBI connects your questions to SAP B1—no SQL required on your side (mock).
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-8 pb-2">
-                {messages.map((m) => (
-                  <ChatMessage
-                    key={m.id}
-                    message={m}
-                    loading={false}
-                    typing={m.id === typingId}
-                    forceSqlOpen={showSqlDefault}
-                    appearance="chat"
-                  />
-                ))}
-                {thinking && (
-                  <ChatMessage
-                    message={{ id: "thinking", role: "assistant", content: "" }}
-                    loading
-                    appearance="chat"
-                  />
-                )}
+  // ── Empty state ──────────────────────────────────────────────────────────
+  if (!hasConversation) {
+    return (
+      <div className="flex h-full flex-col overflow-auto">
+        <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-3 md:px-4">
+          <div className="flex flex-1 flex-col items-center justify-center px-2 text-center">
+            <div className="mb-6 flex flex-col items-center gap-4 md:flex-row md:gap-5">
+              <Sparkles className="size-9 shrink-0 text-amber-400/90 md:size-10" strokeWidth={1.25} />
+              <h1 className="font-serif text-[1.65rem] font-normal tracking-tight text-foreground md:text-4xl md:leading-tight">
+                {greetingLine()}
+              </h1>
+            </div>
+            <p className="text-muted-foreground mb-10 max-w-md text-sm leading-relaxed md:text-[0.9375rem]">
+              Talk to your database in plain language. Add tables as context, ask a question, and AirBI generates a live report.
+            </p>
+
+            {!activeConnection && (
+              <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-300/80">
+                <AlertCircle className="size-4 shrink-0" />
+                No database connected. Add a connection first from the sidebar.
               </div>
             )}
+
+            <div className="w-full">
+              <ChatInput
+                variant="prominent"
+                onSend={sendPrompt}
+                disabled={busy || !activeConnection}
+                connectionId={activeConnection?.id}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Split panel ──────────────────────────────────────────────────────────
+  return (
+    <div className="flex h-full gap-0 overflow-hidden">
+      {/* Left: chat panel */}
+      <div className="flex w-[360px] shrink-0 flex-col border-r border-white/[0.06]">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-6 p-4 pb-2">
+            {messages.map((m) => (
+              <ChatMessage key={m.id} message={m} loading={false} appearance="chat" />
+            ))}
+            {busy && (
+              <ChatMessage
+                message={{ id: "thinking", role: "assistant", content: "" }}
+                loading
+                appearance="chat"
+              />
+            )}
+            <div ref={bottomRef} />
           </div>
         </ScrollArea>
 
-        <div
-          className={
-            hasConversation
-              ? "mt-auto shrink-0 space-y-3 border-t border-white/[0.06] bg-background/85 py-4 backdrop-blur-md"
-              : "mt-auto shrink-0 space-y-3 py-6"
-          }
-        >
-          {showResultsPanel && (
-            <details className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] open:border-white/[0.12] open:bg-white/[0.03]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium outline-none [&::-webkit-details-marker]:hidden">
-                <span className="text-muted-foreground group-open:text-foreground">
-                  Sample results & charts
-                </span>
-                <ChevronDown className="text-muted-foreground size-4 shrink-0 transition group-open:rotate-180" />
-              </summary>
-              <div className="border-border/50 space-y-3 border-t px-3 pb-3 pt-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Switch id="sqlvis" checked={showSqlDefault} onCheckedChange={setShowSqlDefault} />
-                    <Label htmlFor="sqlvis" className="text-xs">
-                      Show generated SQL
-                    </Label>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg text-xs">
-                    <Filter className="mr-1.5 size-3.5" />
-                    Filters
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-lg text-xs"
-                    onClick={() => {
-                      setDownloadNote("Report exported as airbi-mock-export.xlsx (mock).")
-                      window.setTimeout(() => setDownloadNote(null), 4000)
-                    }}
-                  >
-                    <Download className="mr-1.5 size-3.5" />
-                    Download
-                  </Button>
-                </div>
-                {downloadNote && (
-                  <Alert>
-                    <AlertTitle>Download ready</AlertTitle>
-                    <AlertDescription>{downloadNote}</AlertDescription>
-                  </Alert>
-                )}
-                <Tabs defaultValue="table">
-                  <TabsList className="bg-muted/30 h-9 w-full justify-start rounded-xl p-1">
-                    <TabsTrigger value="table" className="rounded-lg text-xs">
-                      Table
-                    </TabsTrigger>
-                    <TabsTrigger value="line" className="rounded-lg text-xs">
-                      Line
-                    </TabsTrigger>
-                    <TabsTrigger value="bar" className="rounded-lg text-xs">
-                      Bar
-                    </TabsTrigger>
-                    <TabsTrigger value="pie" className="rounded-lg text-xs">
-                      Pie
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="table" className="mt-3">
-                    <div className="overflow-hidden rounded-xl border border-white/10">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            {mockQueryColumns.map((c) => (
-                              <TableHead key={c} className="text-xs">
-                                {c}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {pageRows.map((row, idx) => (
-                            <TableRow key={idx}>
-                              {mockQueryColumns.map((c) => (
-                                <TableCell key={c} className="text-xs">
-                                  {String(row[c])}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div className="text-muted-foreground mt-2 flex items-center justify-between text-xs">
-                      <span>
-                        Page {page} of {totalPages}
-                      </span>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 rounded-lg text-xs"
-                          disabled={page <= 1}
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        >
-                          Previous
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 rounded-lg text-xs"
-                          disabled={page >= totalPages}
-                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        >
-                          Next
-                        </Button>
-                      </div>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="line" className="mt-3">
-                    <RevenueChart data={mockRevenueSeries} />
-                  </TabsContent>
-                  <TabsContent value="bar" className="mt-3">
-                    <ResultBarChart data={mockBarChart} />
-                  </TabsContent>
-                  <TabsContent value="pie" className="mt-3">
-                    <ResultPieChart data={mockPieChart} />
-                  </TabsContent>
-                </Tabs>
-              </div>
-            </details>
+        <div className="shrink-0 border-t border-white/[0.06] bg-background/80 p-3 backdrop-blur-md">
+          {error && (
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-300/80">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+              {error}
+            </div>
           )}
-
-          <ChatInput variant="prominent" onSend={sendPrompt} disabled={busy} />
-          <SuggestedPrompts variant="minimal" prompts={suggestedPrompts} onSelect={sendPrompt} />
+          <ChatInput
+            variant="default"
+            onSend={sendPrompt}
+            disabled={busy || !activeConnection}
+            connectionId={activeConnection?.id}
+          />
         </div>
+      </div>
+
+      {/* Right: report panel */}
+      <div className="min-w-0 flex-1 overflow-hidden bg-white/[0.01]">
+        <ReportPanel report={report} loading={reportLoading} />
       </div>
     </div>
   )

@@ -51,41 +51,50 @@ body {
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ── Light theme — teal accent (BETAYARD-inspired) ───────── */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --background: oklch(0.971 0.004 200);      /* light gray — the canvas behind cards */
+  --foreground: oklch(0.10 0.012 255);        /* deep slate */
+  --card: oklch(1 0 0);                       /* pure white cards */
+  --card-foreground: oklch(0.10 0.012 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.10 0.012 255);
+  --primary: oklch(0.59 0.13 193);            /* teal-600 ≈ #0d9488 */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.93 0.010 200);
+  --secondary-foreground: oklch(0.20 0.012 255);
+  --muted: oklch(0.93 0.010 200);
+  --muted-foreground: oklch(0.44 0.012 250);
+  --accent: oklch(0.91 0.045 193);            /* pale teal accent surface */
+  --accent-foreground: oklch(0.25 0.10 193);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: oklch(0.87 0.008 220);
+  --input: oklch(0.95 0.006 220);
+  --ring: oklch(0.59 0.13 193);               /* teal ring */
+  --chart-1: oklch(0.59 0.13 193);           /* teal */
+  --chart-2: oklch(0.60 0.17 250);           /* blue */
+  --chart-3: oklch(0.55 0.16 155);           /* green */
+  --chart-4: oklch(0.72 0.18 75);            /* amber */
+  --chart-5: oklch(0.62 0.22 10);            /* rose */
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(1 0 0);                   /* pure white sidebar */
+  --sidebar-foreground: oklch(0.10 0.012 255);
+  --sidebar-primary: oklch(0.59 0.13 193);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.91 0.045 193);
+  --sidebar-accent-foreground: oklch(0.25 0.10 193);
+  --sidebar-border: oklch(0.87 0.008 220);
+  --sidebar-ring: oklch(0.59 0.13 193);
+
+  /* Chart adaptive tokens — used via var() in report-panel.tsx */
+  --chart-tooltip-bg: oklch(1 0 0);
+  --chart-tooltip-border: oklch(0.87 0.008 220);
+  --chart-tooltip-text: oklch(0.10 0.012 255);
+  --chart-grid-stroke: oklch(0 0 0 / 7%);
+  --chart-axis-stroke: oklch(0.48 0.010 250);
 }
 
+/* ── Dark theme ───────────────────────────────────────────── */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -118,6 +127,13 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Chart adaptive tokens */
+  --chart-tooltip-bg: oklch(0.18 0 0);
+  --chart-tooltip-border: oklch(1 0 0 / 10%);
+  --chart-tooltip-text: oklch(0.985 0 0);
+  --chart-grid-stroke: oklch(1 0 0 / 6%);
+  --chart-axis-stroke: oklch(0.708 0 0);
 }
 
 @layer base {
@@ -130,4 +146,81 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Light-mode overrides for hardcoded glass-dark Tailwind utilities.
+   Rules live outside @layer so they have higher priority than @layer utilities.
+   ───────────────────────────────────────────────────────────────────────── */
+html:not(.dark) {
+  /* ── Card depth: soft shadow instead of glass glow ─────────────────── */
+  & [data-slot="card"] {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 7%), 0 1px 2px oklch(0 0 0 / 4%);
+    border-color: oklch(0.90 0.006 220);
+  }
+
+  /* ── Black overlay backgrounds ─────────────────────────────────────── */
+  & .bg-black\/10  { background-color: oklch(0 0 0 / 0.04); }
+  & .bg-black\/20  { background-color: oklch(0.96 0.006 200); }
+  & .bg-black\/25  { background-color: oklch(1 0 0); }          /* sidebar → pure white */
+  & .bg-black\/30  { background-color: oklch(0.955 0.007 200); }
+  & .bg-black\/40  { background-color: oklch(0.945 0.007 200); }
+
+  /* ── Semi-transparent white card surfaces → opaque light surfaces ─── */
+  & .bg-white\/\[0\.01\] { background-color: transparent; }
+  & .bg-white\/\[0\.02\] { background-color: oklch(1 0 0); }
+  & .bg-white\/\[0\.03\] { background-color: oklch(1 0 0); }
+  & .bg-white\/\[0\.04\] { background-color: oklch(0.99 0.003 200); }
+  & .bg-white\/\[0\.05\] { background-color: oklch(0.97 0.005 200); }
+  & .bg-white\/\[0\.06\] { background-color: oklch(0.96 0.006 200); }
+  & .bg-white\/\[0\.07\] { background-color: oklch(0.955 0.007 200); }
+  & .bg-white\/\[0\.08\] { background-color: oklch(0.94 0.008 200); }
+  & .bg-white\/10        { background-color: oklch(0.94 0.008 200); }
+
+  /* Hover variants */
+  & .hover\:bg-white\/\[0\.03\]:hover { background-color: oklch(0.99 0.003 200); }
+  & .hover\:bg-white\/\[0\.05\]:hover { background-color: oklch(0.97 0.005 200); }
+  & .hover\:bg-white\/\[0\.06\]:hover { background-color: oklch(0.96 0.006 200); }
+  & .hover\:bg-white\/\[0\.08\]:hover { background-color: oklch(0.94 0.008 200); }
+  & .hover\:bg-white\/\[0\.1\]:hover  { background-color: oklch(0.93 0.009 200); }
+
+  /* ── Dark zinc dropdowns / popovers → white surface ────────────────── */
+  & .bg-zinc-900       { background-color: oklch(1 0 0); }
+  & .bg-zinc-900\/90   { background-color: oklch(1 0 0 / 0.98); }
+  & .bg-zinc-900\/95   { background-color: oklch(1 0 0); }
+  & .bg-zinc-950\/70   { background-color: oklch(0.97 0.004 200 / 0.95); }
+
+  /* ── White borders → visible cool-gray borders ─────────────────────── */
+  & .border-white\/\[0\.04\] { border-color: oklch(0.92 0.005 220); }
+  & .border-white\/\[0\.06\] { border-color: oklch(0.90 0.006 220); }
+  & .border-white\/\[0\.08\] { border-color: oklch(0.88 0.007 220); }
+  & .border-white\/\[0\.1\]  { border-color: oklch(0.87 0.008 220); }
+  & .border-white\/\[0\.12\] { border-color: oklch(0.85 0.009 220); }
+  & .border-white\/10        { border-color: oklch(0.87 0.008 220); }
+  & .border-white\/12        { border-color: oklch(0.86 0.009 220); }
+  & .border-white\/15        { border-color: oklch(0.84 0.010 220); }
+  & .border-white\/20        { border-color: oklch(0.82 0.011 220); }
+
+  & .hover\:border-white\/20:hover { border-color: oklch(0.78 0.013 220); }
+
+  /* ── White rings → visible cool-gray rings ─────────────────────────── */
+  & .ring-white\/\[0\.04\] { --tw-ring-color: oklch(0.92 0.005 220); }
+  & .ring-white\/\[0\.06\] { --tw-ring-color: oklch(0.90 0.006 220); }
+  & .ring-white\/\[0\.08\] { --tw-ring-color: oklch(0.88 0.007 220); }
+  & .ring-white\/10        { --tw-ring-color: oklch(0.87 0.008 220); }
+  & .ring-white\/20        { --tw-ring-color: oklch(0.82 0.011 220); }
+
+  & .hover\:ring-white\/20:hover { --tw-ring-color: oklch(0.78 0.013 220); }
+
+  /* ── Sky/emerald text: too bright on white ──────────────────────────── */
+  & .text-sky-300      { color: oklch(0.42 0.16 220); }
+  & .text-sky-300\/90  { color: oklch(0.42 0.16 220); }
+  & .text-sky-200      { color: oklch(0.59 0.13 193); }   /* → teal in light */
+  & .text-emerald-200  { color: oklch(0.37 0.13 155); }
+
+  /* ── Low-opacity white text ─────────────────────────────────────────── */
+  & .text-white\/20    { color: oklch(0.55 0 0); }
+
+  /* ── Separator bg-white/10 ──────────────────────────────────────────── */
+  & .bg-white\/10 { background-color: oklch(0.87 0.008 220); }
 }

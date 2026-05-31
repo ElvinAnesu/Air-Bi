@@ -1,30 +1,44 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { createConnection, testConnection, type ConnectionCreatePayload } from "@/lib/api/connections"
+import {
+  createConnection,
+  testConnection,
+  updateConnection,
+  type ConnectionCreatePayload,
+  type ConnectionUpdatePayload,
+} from "@/lib/api/connections"
 import type { ErpConnection } from "@/types"
 import { Loader2, PlugZap, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export function ConnectionForm({
-  onCancel,
-  onSaved,
-  className,
-}: {
+type ConnectionFormProps = {
+  mode?: "create" | "edit"
+  connectionId?: string
+  initialValues?: Partial<ConnectionCreatePayload>
   onCancel?: () => void
   onSaved?: (connection: ErpConnection) => void
   className?: string
-}) {
+}
+
+export function ConnectionForm({
+  mode = "create",
+  connectionId,
+  initialValues,
+  onCancel,
+  onSaved,
+  className,
+}: ConnectionFormProps) {
   const [form, setForm] = useState<ConnectionCreatePayload>({
-    name: "",
-    server: "",
-    database: "",
-    user: "",
+    name: initialValues?.name ?? "",
+    server: initialValues?.server ?? "",
+    database: initialValues?.database ?? "",
+    user: initialValues?.user ?? "",
     password: "",
   })
   const [testing, setTesting] = useState(false)
@@ -32,6 +46,18 @@ export function ConnectionForm({
   const [banner, setBanner] = useState<null | { variant: "success" | "error"; title: string; body: string }>(
     null
   )
+
+  useEffect(() => {
+    if (initialValues) {
+      setForm({
+        name: initialValues.name ?? "",
+        server: initialValues.server ?? "",
+        database: initialValues.database ?? "",
+        user: initialValues.user ?? "",
+        password: "",
+      })
+    }
+  }, [initialValues])
 
   const update = (key: keyof ConnectionCreatePayload, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -45,13 +71,15 @@ export function ConnectionForm({
     password: form.password,
   })
 
-  const validate = () => {
+  const validate = (requirePassword: boolean) => {
     const p = payload()
-    if (!p.name || !p.server || !p.database || !p.user || !p.password) {
+    if (!p.name || !p.server || !p.database || !p.user || (requirePassword && !p.password)) {
       setBanner({
         variant: "error",
         title: "Missing fields",
-        body: "Connection name, server IP, database name, username, and password are required.",
+        body: requirePassword
+          ? "Connection name, server IP, database name, username, and password are required."
+          : "Connection name, server IP, database name, and username are required.",
       })
       return false
     }
@@ -59,7 +87,7 @@ export function ConnectionForm({
   }
 
   const handleTest = async () => {
-    if (!validate()) return
+    if (!validate(true)) return
     setTesting(true)
     setBanner(null)
     try {
@@ -81,21 +109,35 @@ export function ConnectionForm({
   }
 
   const handleSave = async () => {
-    if (!validate()) return
+    const requirePassword = mode === "create"
+    if (!validate(requirePassword)) return
     setSaving(true)
     setBanner(null)
     try {
-      const connection = await createConnection(payload())
+      const p = payload()
+      let connection: ErpConnection
+      if (mode === "edit" && connectionId) {
+        const updates: ConnectionUpdatePayload = {
+          name: p.name,
+          server: p.server,
+          database: p.database,
+          user: p.user,
+        }
+        if (p.password) updates.password = p.password
+        connection = await updateConnection(connectionId, updates)
+      } else {
+        connection = await createConnection(p)
+      }
       setBanner({
         variant: "success",
-        title: "Connection saved",
-        body: "Stored in memory for this server session. Restart clears all connections.",
+        title: mode === "edit" ? "Connection updated" : "Connection saved",
+        body: "Saved securely to your team workspace.",
       })
       window.setTimeout(() => onSaved?.(connection), 400)
     } catch (err) {
       setBanner({
         variant: "error",
-        title: "Could not save",
+        title: mode === "edit" ? "Could not update" : "Could not save",
         body: err instanceof Error ? err.message : "Failed to save connection.",
       })
     } finally {
@@ -125,10 +167,10 @@ export function ConnectionForm({
         )}
         <CardTitle className="flex items-center gap-2 pr-10 text-base font-semibold">
           <PlugZap className="size-4 shrink-0" />
-          New connection
+          {mode === "edit" ? "Edit connection" : "New connection"}
         </CardTitle>
         <CardDescription>
-          Connect to a SAP B1 MSSQL database. Credentials are kept in server memory only until restart.
+          Connect to a SAP B1 MSSQL database. Credentials are saved securely to your team workspace.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -196,6 +238,7 @@ export function ConnectionForm({
               value={form.password}
               onChange={(e) => update("password", e.target.value)}
               autoComplete="current-password"
+              placeholder={mode === "edit" ? "Leave blank to keep current password" : ""}
               className="h-10 rounded-xl border-white/12 bg-black/30"
             />
           </div>
@@ -213,7 +256,7 @@ export function ConnectionForm({
           </Button>
           <Button type="button" className="rounded-xl" disabled={testing || saving} onClick={handleSave}>
             {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Save connection
+            {mode === "edit" ? "Save changes" : "Save connection"}
           </Button>
           {onCancel && (
             <Button type="button" variant="ghost" className="rounded-xl" onClick={onCancel} disabled={testing || saving}>

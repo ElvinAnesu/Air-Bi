@@ -4,16 +4,24 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { ChevronRight, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import { ChevronRight, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react"
 
 export function ConnectionCard({
   connection,
   href,
+  onEdit,
   onSync,
+  onDelete,
+  syncing = false,
+  deleting = false,
 }: {
   connection: ErpConnection
   href?: string
+  onEdit?: (id: string) => void
   onSync?: (id: string) => void
+  onDelete?: (id: string) => void
+  syncing?: boolean
+  deleting?: boolean
 }) {
   const statusColor =
     connection.status === "connected"
@@ -73,21 +81,45 @@ export function ConnectionCard({
         className="flex flex-wrap items-center gap-2 border-t border-white/[0.08] bg-black/20 px-4 py-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <Button variant="outline" size="sm" className="rounded-xl border-white/15 bg-white/[0.06] hover:bg-white/[0.1]">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="rounded-xl border-white/15 bg-white/[0.06] hover:bg-white/[0.1]"
+          onClick={() => onEdit?.(connection.id)}
+          disabled={syncing || deleting}
+        >
           <Pencil className="mr-1.5 size-3.5" />
           Edit
         </Button>
         <Button
+          type="button"
           variant="outline"
           size="sm"
           className="rounded-xl border-white/15 bg-white/[0.06] hover:bg-white/[0.1]"
           onClick={() => onSync?.(connection.id)}
+          disabled={syncing || deleting}
         >
-          <RefreshCw className="mr-1.5 size-3.5" />
+          {syncing ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1.5 size-3.5" />
+          )}
           Sync
         </Button>
-        <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto sm:ml-0">
-          <Trash2 className="mr-1.5 size-3.5" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto sm:ml-0"
+          onClick={() => onDelete?.(connection.id)}
+          disabled={syncing || deleting}
+        >
+          {deleting ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="mr-1.5 size-3.5" />
+          )}
           Delete
         </Button>
       </CardFooter>

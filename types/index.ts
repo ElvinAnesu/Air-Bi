@@ -31,6 +31,8 @@ export type ErpConnection = {
   tableCount: number
   lastSync: string
   server?: string
+  database?: string
+  username?: string
 }
 
 export type DashboardKpi = {

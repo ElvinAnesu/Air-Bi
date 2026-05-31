@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 
 export default function SettingsPage() {
   return (
+    <div className="h-full overflow-auto p-4 md:p-6">
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
@@ -33,6 +34,7 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+    </div>
     </div>
   )
 }
