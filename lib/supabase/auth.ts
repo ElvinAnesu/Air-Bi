@@ -58,10 +58,16 @@ export async function getAuthUser(req: NextRequest | Request) {
     subscription = sub
   }
 
+  const team = membership?.teams
+  const teamRecord = Array.isArray(team) ? team[0] : team
+  const teamName = teamRecord && typeof teamRecord === "object" && "name" in teamRecord
+    ? String(teamRecord.name)
+    : null
+
   return {
     user: data.user,
     teamId,
-    teamName: (membership?.teams as { name: string } | null)?.name ?? null,
+    teamName,
     role: membership?.role ?? null,
     subscription,
   }
