@@ -53,7 +53,7 @@ export default function ChatsPage() {
               Start a conversation from the home page and it will appear here automatically.
             </p>
             <Link
-              href="/"
+              href="/workspace"
               className="mt-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-medium transition hover:bg-white/[0.08]"
             >
               New chat

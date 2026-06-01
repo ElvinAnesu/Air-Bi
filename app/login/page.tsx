@@ -2,7 +2,8 @@
 
 import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Sparkles, Eye, EyeOff, Loader2 } from "lucide-react"
+import { AirbiLogo } from "@/components/brand/airbi-logo"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,7 +14,7 @@ type Mode = "sign-in" | "sign-up"
 function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get("redirectTo") ?? "/"
+  const redirectTo = searchParams.get("redirectTo") ?? "/workspace"
 
   const [mode, setMode] = useState<Mode>("sign-in")
   const [email, setEmail] = useState("")
@@ -58,8 +59,8 @@ function LoginPageContent() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/30 to-violet-500/30 ring-1 ring-border">
-            <Sparkles className="size-6 text-primary" />
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-black p-2 ring-1 ring-border">
+            <AirbiLogo framed={false} className="size-full" />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">AirBI</h1>

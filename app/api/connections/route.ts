@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabaseAdmin
     .from("connections")
     .select(CONNECTION_SELECT)
-    .eq("team_id", auth!.teamId)
+    .eq("team_id", auth.teamId)
     .order("created_at", { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabaseAdmin
     .from("connections")
     .insert({
-      team_id: auth!.teamId,
-      created_by: auth!.user.id,
+      team_id: auth.teamId,
+      created_by: auth.user.id,
       name,
       erp_type: erpType,
       server,

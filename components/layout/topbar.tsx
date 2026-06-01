@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/context/auth-context"
 import { LogOut, Menu, Moon, Plus, Search, Sun } from "lucide-react"
 
 const titles: Record<string, string> = {
-  "/": "New chat",
+  "/workspace": "New chat",
   "/chats": "Chats",
   "/reports": "Reports",
   "/saved-queries": "Saved queries",
@@ -74,9 +74,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </Button>
       <div className="hidden min-w-0 flex-1 md:block">
         <p className="truncate text-sm font-medium">{title}</p>
-        {pathname !== "/" && (
-          <p className="text-muted-foreground truncate text-xs">Natural language to ERP intelligence</p>
-        )}
+        <p className="text-muted-foreground truncate text-xs">Natural language to ERP intelligence</p>
       </div>
       <div className="relative mx-auto hidden max-w-md flex-1 md:mx-0 md:flex">
         <Search className="text-muted-foreground pointer-events-none absolute top-2.5 left-3 size-4" />

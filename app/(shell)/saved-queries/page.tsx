@@ -113,7 +113,7 @@ export default function SavedQueriesPage() {
               SQL queries saved by your workspace team.
             </p>
           </div>
-          <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "h-9 w-fit rounded-xl px-4")}>
+          <Link href="/workspace" className={cn(buttonVariants({ variant: "outline" }), "h-9 w-fit rounded-xl px-4")}>
             New chat
           </Link>
         </div>
@@ -128,7 +128,7 @@ export default function SavedQueriesPage() {
               When the AI generates a report, open the SQL block and click &quot;Save query&quot; &mdash; it will appear here.
             </p>
             <Link
-              href="/"
+              href="/workspace"
               className="mt-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-medium transition hover:bg-white/[0.08]"
             >
               Start a chat

@@ -29,12 +29,12 @@ import {
   PanelLeft,
   ScrollText,
   Settings,
-  Sparkles,
   SquarePen,
 } from "lucide-react"
+import { AirbiLogo } from "@/components/brand/airbi-logo"
 
 const mainNav = [
-  { href: "/", label: "New chat", icon: SquarePen },
+  { href: "/workspace", label: "New chat", icon: SquarePen },
   { href: "/chats", label: "Chats", icon: MessagesSquare },
   { href: "/reports", label: "Reports", icon: LayoutDashboard },
   { href: "/saved-queries", label: "Saved queries", icon: ScrollText },
@@ -43,7 +43,7 @@ const mainNav = [
 ] as const
 
 function navItemIsActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/"
+  if (href === "/workspace") return pathname === "/workspace"
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
@@ -96,9 +96,7 @@ export function SidebarNav({
           collapsed && "justify-center px-0"
         )}
       >
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/30 to-violet-500/30 ring-1 ring-white/10">
-          <Sparkles className="size-4 text-primary dark:text-sky-200" />
-        </div>
+        <AirbiLogo className="size-9 shrink-0 p-1.5" />
         {!collapsed && (
           <div>
             <p className="text-sm font-semibold tracking-tight">AirBI</p>

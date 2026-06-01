@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ChatMessageModel } from "@/types"
 import { useActiveConnection } from "@/lib/context/active-connection"
 import { useUI } from "@/lib/context/ui-context"
@@ -30,35 +30,68 @@ function truncate(text: string, max = 55): string {
 type WorkspaceViewProps = {
   initialMessages?: ChatMessageModel[]
   initialChatId?: string
+  initialReport?: ReportData | null
+  initialSavedReportId?: string | null
 }
 
-export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewProps = {}) {
+export function WorkspaceView({
+  initialMessages,
+  initialChatId,
+  initialReport = null,
+  initialSavedReportId = null,
+}: WorkspaceViewProps = {}) {
   const { activeConnection } = useActiveConnection()
   const { autoCollapse } = useUI()
   const [messages, setMessages] = useState<ChatMessageModel[]>(initialMessages ?? [])
   const [busy, setBusy] = useState(false)
-  const [report, setReport] = useState<ReportData | null>(null)
+  const [report, setReport] = useState<ReportData | null>(initialReport)
   const [reportLoading, setReportLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [chatId, setChatId] = useState<string | null>(initialChatId ?? null)
   const conversationRef = useRef<ConversationTurn[]>(
-    // Rebuild conversation history from initial messages so Claude has context
     (initialMessages ?? []).map((m) => ({ role: m.role, content: m.content }))
   )
   const chatIdRef = useRef<string | null>(initialChatId ?? null)
-  // Track which message IDs are already persisted to avoid re-saving
   const savedMsgIds = useRef<Set<string>>(
     new Set((initialMessages ?? []).map((m) => m.id))
   )
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const hasConversation = messages.length > 0
+  const showWorkspace = messages.length > 0 || report !== null
+
+  useEffect(() => {
+    if (initialReport) autoCollapse()
+  }, [initialReport, autoCollapse])
+
+  const syncSavedReport = useCallback(
+    async (reportData: ReportData, nextChatId?: string | null) => {
+      if (!initialSavedReportId) return
+      try {
+        await fetch(`/api/reports/${initialSavedReportId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: reportData.title,
+            description: reportData.explanation,
+            sql: reportData.sql,
+            chartType: reportData.chartType,
+            columns: reportData.columns,
+            rows: reportData.rows,
+            rowCount: reportData.rowCount,
+            connectionId: activeConnection?.id ?? null,
+            chatId: nextChatId ?? chatIdRef.current ?? null,
+          }),
+        })
+      } catch { /* ignore */ }
+    },
+    [initialSavedReportId, activeConnection?.id]
+  )
 
   const persistChat = useCallback(
     async (updatedMessages: ChatMessageModel[]) => {
       const firstUser = updatedMessages.find((m) => m.role === "user")
       if (!firstUser) return
 
-      // Create the chat row on first save
       if (!chatIdRef.current) {
         try {
           const res = await fetch("/api/chats", {
@@ -72,13 +105,20 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
           if (res.ok) {
             const chat = await res.json()
             chatIdRef.current = chat.id
+            setChatId(chat.id)
+            if (initialSavedReportId) {
+              await fetch(`/api/reports/${initialSavedReportId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chatId: chat.id }),
+              })
+            }
           }
-        } catch { /* ignore — chat data stays in memory */ }
+        } catch { /* ignore */ }
       }
 
       if (!chatIdRef.current) return
 
-      // Save only messages not yet persisted
       const newMsgs = updatedMessages.filter((m) => !savedMsgIds.current.has(m.id))
       if (newMsgs.length === 0) return
 
@@ -95,7 +135,7 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
         }
       } catch { /* ignore */ }
     },
-    [activeConnection]
+    [activeConnection, initialSavedReportId]
   )
 
   const sendPrompt = useCallback(
@@ -119,7 +159,6 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
 
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
 
-      // Persist chat immediately with user message
       persistChat(nextMessages)
 
       try {
@@ -151,7 +190,6 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
           throw new Error(data.error ?? "Something went wrong")
         }
 
-        // ── Clarify: Claude asked questions, no report yet ──────────────────
         if (data.type === "clarify") {
           const assistantContent = data.message ?? "Could you provide more details?"
           const assistantMsg: ChatMessageModel = {
@@ -170,7 +208,6 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
           return
         }
 
-        // ── Report: Claude generated SQL and it was executed ────────────────
         const assistantContent = data.explanation ?? "Report generated."
         const assistantMsg: ChatMessageModel = {
           id: crypto.randomUUID(),
@@ -198,8 +235,8 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
           connectionName: activeConnection?.name,
         }
         setReport(reportData)
+        void syncSavedReport(reportData)
 
-        // Persist updated chat with assistant reply
         persistChat(withAssistant)
       } catch (err) {
         const msg = err instanceof Error ? err.message : "An unexpected error occurred"
@@ -218,11 +255,10 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
       }
     },
-    [busy, activeConnection, autoCollapse, messages, persistChat]
+    [busy, activeConnection, autoCollapse, messages, persistChat, syncSavedReport]
   )
 
-  // ── Empty state ──────────────────────────────────────────────────────────
-  if (!hasConversation) {
+  if (!showWorkspace) {
     return (
       <div className="flex h-full flex-col overflow-auto">
         <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-3 md:px-4">
@@ -258,13 +294,16 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
     )
   }
 
-  // ── Split panel ──────────────────────────────────────────────────────────
   return (
     <div className="flex h-full gap-0 overflow-hidden">
-      {/* Left: chat panel */}
       <div className="flex w-[360px] shrink-0 flex-col border-r border-white/[0.06]">
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-6 p-4 pb-2">
+            {messages.length === 0 && report && (
+              <p className="text-muted-foreground px-1 text-center text-xs leading-relaxed">
+                Ask a follow-up question to refine this report.
+              </p>
+            )}
             {messages.map((m) => (
               <ChatMessage key={m.id} message={m} loading={false} appearance="chat" />
             ))}
@@ -295,9 +334,14 @@ export function WorkspaceView({ initialMessages, initialChatId }: WorkspaceViewP
         </div>
       </div>
 
-      {/* Right: report panel */}
       <div className="min-w-0 flex-1 overflow-hidden bg-white/[0.01]">
-        <ReportPanel report={report} loading={reportLoading} />
+        <ReportPanel
+          report={report}
+          loading={reportLoading}
+          chatId={chatId}
+          connectionId={activeConnection?.id}
+          savedReportId={initialSavedReportId}
+        />
       </div>
     </div>
   )

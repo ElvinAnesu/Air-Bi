@@ -100,15 +100,27 @@ type ReportPanelProps = {
   report: ReportData | null
   loading: boolean
   viewOnly?: boolean
+  hideSql?: boolean
+  chatId?: string | null
+  connectionId?: string | null
+  savedReportId?: string | null
 }
 
-export function ReportPanel({ report, loading, viewOnly = false }: ReportPanelProps) {
+export function ReportPanel({
+  report,
+  loading,
+  viewOnly = false,
+  hideSql = false,
+  chatId = null,
+  connectionId = null,
+  savedReportId = null,
+}: ReportPanelProps) {
   const [page, setPage] = useState(1)
   const [activeTab, setActiveTab] = useState("auto")
 
   // Save report dialog
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
-  const [reportSaved, setReportSaved] = useState(false)
+  const [reportSaved, setReportSaved] = useState(!!savedReportId)
 
   // Save query dialog
   const [queryDialogOpen, setQueryDialogOpen] = useState(false)
@@ -122,19 +134,30 @@ export function ReportPanel({ report, loading, viewOnly = false }: ReportPanelPr
   const handleConfirmSaveReport = async (name: string) => {
     if (!report) return
     try {
-      const res = await fetch("/api/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: name,
-          description: report.explanation,
-          sql: report.sql,
-          chartType: report.chartType,
-          columns: report.columns,
-          rows: report.rows,
-          rowCount: report.rowCount,
-        }),
-      })
+      const payload = {
+        title: name,
+        description: report.explanation,
+        sql: report.sql,
+        chartType: report.chartType,
+        columns: report.columns,
+        rows: report.rows,
+        rowCount: report.rowCount,
+        connectionId: connectionId ?? null,
+        chatId: chatId ?? null,
+      }
+
+      const res = savedReportId
+        ? await fetch(`/api/reports/${savedReportId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch("/api/reports", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+
       if (res.ok) setReportSaved(true)
     } catch { /* ignore */ }
   }
@@ -258,14 +281,16 @@ export function ReportPanel({ report, loading, viewOnly = false }: ReportPanelPr
       </div>
 
       {/* SQL block */}
-      <div className="shrink-0">
-        <SqlBlock
-          sql={report.sql}
-          onSaveQuery={() => setQueryDialogOpen(true)}
-          querySaved={querySaved}
-          viewOnly={viewOnly}
-        />
-      </div>
+      {!hideSql && (
+        <div className="shrink-0">
+          <SqlBlock
+            sql={report.sql}
+            onSaveQuery={() => setQueryDialogOpen(true)}
+            querySaved={querySaved}
+            viewOnly={viewOnly}
+          />
+        </div>
+      )}
 
       {/* Results */}
       <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02]">

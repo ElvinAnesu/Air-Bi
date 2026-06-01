@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { WorkspaceView } from "@/components/workspace/workspace-view"
 
-export default function WorkspaceRedirectPage() {
-  redirect("/")
+export default function WorkspacePage() {
+  return <WorkspaceView />
 }

@@ -7,8 +7,12 @@ import "./globals.css"
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
 export const metadata: Metadata = {
-  title: "AirBI",
-  description: "AI-powered conversational ERP intelligence",
+  title: "AirBI — Talk to your database",
+  description: "AI-powered conversational ERP intelligence for enterprise teams.",
+  icons: {
+    icon: "/brand/airbi-logo.png",
+    apple: "/brand/airbi-logo.png",
+  },
 }
 
 export default function RootLayout({

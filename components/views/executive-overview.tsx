@@ -29,7 +29,7 @@ export function ExecutiveOverview() {
             Live blend of finance, operations, and AI signals (mock).
           </p>
         </div>
-        <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "h-9 rounded-xl px-4")}>
+        <Link href="/workspace" className={cn(buttonVariants({ variant: "outline" }), "h-9 rounded-xl px-4")}>
           New chat
         </Link>
       </div>
