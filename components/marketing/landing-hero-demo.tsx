@@ -200,7 +200,7 @@ export function LandingHeroDemo() {
                             fontSize: 11,
                             color: "#fff",
                           }}
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
+                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, "Revenue"]}
                         />
                         <Bar dataKey="value" fill="oklch(0.59 0.13 193)" radius={[6, 6, 0, 0]} />
                       </BarChart>
