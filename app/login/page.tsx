@@ -155,7 +155,7 @@ function LoginPageContent() {
 
         {/* Toggle */}
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          {mode === "sign-in" ? "Don&apos;t have an account?" : "Already have an account?"}{" "}
+          {mode === "sign-in" ? "Do not have an account" : "Already have an account?"}{" "}
           <button
             type="button"
             onClick={() => { setMode(mode === "sign-in" ? "sign-up" : "sign-in"); setError(null) }}
