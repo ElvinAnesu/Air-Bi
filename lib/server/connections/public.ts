@@ -6,6 +6,7 @@ export function toPublicConnection(stored: StoredConnection): ErpConnection {
     id: stored.id,
     name: stored.name,
     erpType: stored.erpType,
+    connectionType: "mssql",
     status: "connected",
     tableCount: stored.tableCount,
     lastSync: "just now",
