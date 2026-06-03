@@ -20,6 +20,7 @@ import {
   isPesepayFailedStatus,
   isPesepayPaidStatus,
   pollPesepayTransaction,
+  type PesepayTransactionResponse,
 } from "@/lib/server/billing/pesepay/client"
 import { decryptPesepayResultPayload } from "@/lib/server/billing/pesepay/crypto"
 import {
@@ -547,7 +548,9 @@ export async function handlePesepayResultCallback(input: {
   userId?: string | null
 }) {
   if (input.encryptedPayload) {
-    const decrypted = decryptPesepayResultPayload(input.encryptedPayload)
+    const decrypted = decryptPesepayResultPayload<PesepayTransactionResponse>(
+      input.encryptedPayload
+    )
 
     console.log("[Pesepay] result decrypted response", decrypted)
 
