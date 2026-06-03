@@ -73,10 +73,11 @@ function aggregateRows(
         .filter((v) => v !== null && v !== undefined) as Array<string | number>
 
       if (agg.fn === "count") out[alias] = groupRows.length
-      else if (agg.fn === "sum") out[alias] = values.reduce((s, v) => s + Number(v), 0)
+      else if (agg.fn === "sum")
+        out[alias] = values.reduce<number>((sum, value) => sum + Number(value), 0)
       else if (agg.fn === "avg")
         out[alias] = values.length
-          ? values.reduce((s, v) => s + Number(v), 0) / values.length
+          ? values.reduce<number>((sum, value) => sum + Number(value), 0) / values.length
           : 0
       else if (agg.fn === "min")
         out[alias] = values.length ? Math.min(...values.map(Number)) : null
