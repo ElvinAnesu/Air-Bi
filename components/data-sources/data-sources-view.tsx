@@ -128,12 +128,8 @@ export function DataSourcesView() {
           icon={Database}
           title="No data sources yet"
           description="Create a data source from a connection or upload an Excel file, then manually add the tables you want to use."
-          action={
-            <Button className="rounded-xl" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-2 size-4" />
-              Create data source
-            </Button>
-          }
+          actionLabel="Create data source"
+          onAction={() => setCreateOpen(true)}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
