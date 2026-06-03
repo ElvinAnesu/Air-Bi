@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/supabase/auth"
+import { planLimitResponse } from "@/lib/server/billing/enforce"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export async function GET(req: NextRequest) {
@@ -25,6 +26,9 @@ export async function POST(req: NextRequest) {
   if (!name || !sql) {
     return NextResponse.json({ error: "name and sql are required" }, { status: 400 })
   }
+
+  const limitResponse = await planLimitResponse(auth!, "saved_queries")
+  if (limitResponse) return limitResponse
 
   const { data, error } = await supabaseAdmin
     .from("saved_queries")

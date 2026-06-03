@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ChatMessageModel } from "@/types"
-import { useActiveConnection } from "@/lib/context/active-connection"
+import { useActiveDataSource } from "@/lib/context/active-data-source"
 import { useUI } from "@/lib/context/ui-context"
 import { ChatMessage } from "@/components/chat/chat-message"
 import { ChatInput, type SelectedTable } from "@/components/chat/chat-input"
@@ -40,7 +40,7 @@ export function WorkspaceView({
   initialReport = null,
   initialSavedReportId = null,
 }: WorkspaceViewProps = {}) {
-  const { activeConnection } = useActiveConnection()
+  const { activeDataSource } = useActiveDataSource()
   const { autoCollapse } = useUI()
   const [messages, setMessages] = useState<ChatMessageModel[]>(initialMessages ?? [])
   const [busy, setBusy] = useState(false)
@@ -56,8 +56,13 @@ export function WorkspaceView({
     new Set((initialMessages ?? []).map((m) => m.id))
   )
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [greeting, setGreeting] = useState("Welcome")
 
   const showWorkspace = messages.length > 0 || report !== null
+
+  useEffect(() => {
+    setGreeting(greetingLine())
+  }, [])
 
   useEffect(() => {
     if (initialReport) autoCollapse()
@@ -78,13 +83,14 @@ export function WorkspaceView({
             columns: reportData.columns,
             rows: reportData.rows,
             rowCount: reportData.rowCount,
-            connectionId: activeConnection?.id ?? null,
+            connectionId: activeDataSource?.connectionId ?? null,
+            dataSourceId: activeDataSource?.id ?? null,
             chatId: nextChatId ?? chatIdRef.current ?? null,
           }),
         })
       } catch { /* ignore */ }
     },
-    [initialSavedReportId, activeConnection?.id]
+    [initialSavedReportId, activeDataSource?.id, activeDataSource?.connectionId]
   )
 
   const persistChat = useCallback(
@@ -99,7 +105,8 @@ export function WorkspaceView({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               title: truncate(firstUser.content),
-              connectionId: activeConnection?.id ?? null,
+              connectionId: activeDataSource?.connectionId ?? null,
+              dataSourceId: activeDataSource?.id ?? null,
             }),
           })
           if (res.ok) {
@@ -135,7 +142,7 @@ export function WorkspaceView({
         }
       } catch { /* ignore */ }
     },
-    [activeConnection, initialSavedReportId]
+    [activeDataSource, initialSavedReportId]
   )
 
   const sendPrompt = useCallback(
@@ -167,7 +174,8 @@ export function WorkspaceView({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: trimmed,
-            connectionId: activeConnection?.id ?? "",
+            dataSourceId: activeDataSource?.id ?? "",
+            connectionId: activeDataSource?.connectionId ?? "",
             selectedTables,
             conversationHistory: conversationRef.current,
           }),
@@ -232,7 +240,7 @@ export function WorkspaceView({
           columns: data.columns ?? [],
           rows: data.rows ?? [],
           rowCount: data.rowCount ?? 0,
-          connectionName: activeConnection?.name,
+          connectionName: activeDataSource?.name,
         }
         setReport(reportData)
         void syncSavedReport(reportData)
@@ -255,7 +263,7 @@ export function WorkspaceView({
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
       }
     },
-    [busy, activeConnection, autoCollapse, messages, persistChat, syncSavedReport]
+    [busy, activeDataSource, autoCollapse, messages, persistChat, syncSavedReport]
   )
 
   if (!showWorkspace) {
@@ -266,17 +274,17 @@ export function WorkspaceView({
             <div className="mb-6 flex flex-col items-center gap-4 md:flex-row md:gap-5">
               <Sparkles className="size-9 shrink-0 text-amber-400/90 md:size-10" strokeWidth={1.25} />
               <h1 className="font-serif text-[1.65rem] font-normal tracking-tight text-foreground md:text-4xl md:leading-tight">
-                {greetingLine()}
+                {greeting}
               </h1>
             </div>
             <p className="text-muted-foreground mb-10 max-w-md text-sm leading-relaxed md:text-[0.9375rem]">
               Talk to your database in plain language. Add tables as context, ask a question, and AirBI generates a live report.
             </p>
 
-            {!activeConnection && (
+            {!activeDataSource && (
               <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-300/80">
                 <AlertCircle className="size-4 shrink-0" />
-                No database connected. Add a connection first from the sidebar.
+                No data source selected. Create one from the Data sources page.
               </div>
             )}
 
@@ -284,8 +292,8 @@ export function WorkspaceView({
               <ChatInput
                 variant="prominent"
                 onSend={sendPrompt}
-                disabled={busy || !activeConnection}
-                connectionId={activeConnection?.id}
+                disabled={busy || !activeDataSource}
+                dataSourceId={activeDataSource?.id}
               />
             </div>
           </div>
@@ -328,8 +336,8 @@ export function WorkspaceView({
           <ChatInput
             variant="default"
             onSend={sendPrompt}
-            disabled={busy || !activeConnection}
-            connectionId={activeConnection?.id}
+            disabled={busy || !activeDataSource}
+            dataSourceId={activeDataSource?.id}
           />
         </div>
       </div>
@@ -339,7 +347,8 @@ export function WorkspaceView({
           report={report}
           loading={reportLoading}
           chatId={chatId}
-          connectionId={activeConnection?.id}
+          connectionId={activeDataSource?.connectionId}
+          dataSourceId={activeDataSource?.id}
           savedReportId={initialSavedReportId}
         />
       </div>

@@ -22,6 +22,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     cta: "Get started free",
     features: [
       "1 database connection",
+      "Up to 5 data sources",
       "Solo workspace (1 user)",
       "AI chat and report generation",
       "All chart types — bar, line, pie, area, and more",
@@ -41,6 +42,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     cta: "Get started",
     features: [
       "Up to 3 database connections",
+      "Up to 15 data sources",
       "Teams up to 5 members",
       "Unlimited saved chats, reports, and queries",
       "All chart types with no visualization limits",
@@ -58,6 +60,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     cta: "Get started",
     features: [
       "Unlimited database connections",
+      "Up to 25 data sources",
       "Teams up to 25 members",
       "Unlimited saved chats, reports, and queries",
       "All chart types with no visualization limits",

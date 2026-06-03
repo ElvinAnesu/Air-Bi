@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { fetchConnectionSchema } from "@/lib/api/connections"
-import type { SchemaTableSummary } from "@/types"
+import { fetchDataSourceTables } from "@/lib/api/data-sources"
+import type { DataSourceTable } from "@/types"
 import { Database, Loader2, Plus, SendHorizonal, X } from "lucide-react"
 
 export type SelectedTable = {
@@ -20,13 +20,14 @@ type ChatInputProps = {
   disabled?: boolean
   variant?: "default" | "prominent"
   connectionId?: string
+  dataSourceId?: string
 }
 
-export function ChatInput({ onSend, disabled, variant = "default", connectionId }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, variant = "default", connectionId, dataSourceId }: ChatInputProps) {
   const [value, setValue] = useState("")
   const [selectedTables, setSelectedTables] = useState<SelectedTable[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [availableTables, setAvailableTables] = useState<SchemaTableSummary[]>([])
+  const [availableTables, setAvailableTables] = useState<DataSourceTable[]>([])
   const [loadingTables, setLoadingTables] = useState(false)
   const [tableSearch, setTableSearch] = useState("")
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -40,16 +41,21 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId 
     setValue("")
   }
 
-  // Load tables when picker opens
   useEffect(() => {
-    if (!pickerOpen || !connectionId) return
+    setAvailableTables([])
+    setSelectedTables([])
+  }, [dataSourceId, connectionId])
+
+  useEffect(() => {
+    const sourceId = dataSourceId ?? connectionId
+    if (!pickerOpen || !sourceId) return
     if (availableTables.length > 0) return
     setLoadingTables(true)
-    fetchConnectionSchema(connectionId)
+    fetchDataSourceTables(sourceId)
       .then(setAvailableTables)
       .catch(() => setAvailableTables([]))
       .finally(() => setLoadingTables(false))
-  }, [pickerOpen, connectionId, availableTables.length])
+  }, [pickerOpen, dataSourceId, connectionId, availableTables.length])
 
   // Close picker on outside click
   useEffect(() => {
@@ -64,14 +70,17 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId 
   }, [pickerOpen])
 
   const filteredTables = availableTables.filter((t) =>
-    `${t.schema}.${t.name}`.toLowerCase().includes(tableSearch.toLowerCase())
+    `${t.externalSchema}.${t.externalName}`.toLowerCase().includes(tableSearch.toLowerCase())
   )
 
-  const toggleTable = (table: SchemaTableSummary) => {
+  const toggleTable = (table: DataSourceTable) => {
     setSelectedTables((prev) => {
       const exists = prev.find((t) => t.id === table.id)
       if (exists) return prev.filter((t) => t.id !== table.id)
-      return [...prev, { schema: table.schema, name: table.name, id: table.id }]
+      return [
+        ...prev,
+        { schema: table.externalSchema, name: table.externalName, id: table.id },
+      ]
     })
   }
 
@@ -100,10 +109,10 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId 
                 <Loader2 className="size-3.5 animate-spin" />
                 Loading tables&hellip;
               </div>
-            ) : !connectionId ? (
-              <p className="py-6 text-center text-xs text-muted-foreground">No database connected</p>
+            ) : !(dataSourceId ?? connectionId) ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">No data source selected</p>
             ) : filteredTables.length === 0 ? (
-              <p className="py-6 text-center text-xs text-muted-foreground">No tables found</p>
+              <p className="py-6 text-center text-xs text-muted-foreground">No tables in this data source. Add tables from the Data sources page.</p>
             ) : (
               <div className="p-1.5 space-y-0.5">
                 {filteredTables.map((table) => {
@@ -121,8 +130,8 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId 
                     >
                       <Database className="size-3.5 shrink-0 text-sky-400/70" />
                       <span className="min-w-0">
-                        <span className="text-muted-foreground/70">{table.schema}.</span>
-                        <span className="font-medium">{table.name}</span>
+                        <span className="text-muted-foreground/70">{table.externalSchema}.</span>
+                        <span className="font-medium">{table.externalName}</span>
                       </span>
                       {selected && (
                         <span className="ml-auto shrink-0 rounded-md bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-300">
@@ -194,10 +203,10 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId 
             className={cn(
               "h-8 gap-1.5 rounded-xl text-xs text-muted-foreground hover:text-foreground",
               pickerOpen && "bg-white/[0.06] text-foreground",
-              !connectionId && "opacity-40 cursor-not-allowed"
+              !dataSourceId && !connectionId && "opacity-40 cursor-not-allowed"
             )}
-            onClick={() => connectionId && setPickerOpen((o) => !o)}
-            title={connectionId ? "Add tables as context" : "Connect a database first"}
+            onClick={() => (dataSourceId ?? connectionId) && setPickerOpen((o) => !o)}
+            title={dataSourceId ?? connectionId ? "Add tables as context" : "Select a data source first"}
           >
             <Plus className="size-3.5" />
             <span>Add tables</span>

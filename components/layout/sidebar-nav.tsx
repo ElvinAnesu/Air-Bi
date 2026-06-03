@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useActiveConnection } from "@/lib/context/active-connection"
+import { useActiveDataSource } from "@/lib/context/active-data-source"
 import { useUI } from "@/lib/context/ui-context"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
@@ -23,6 +23,7 @@ import {
 import {
   Cable,
   ChevronDown,
+  CreditCard,
   Database,
   LayoutDashboard,
   MessagesSquare,
@@ -30,6 +31,7 @@ import {
   ScrollText,
   Settings,
   SquarePen,
+  Users,
 } from "lucide-react"
 import { AirbiLogo } from "@/components/brand/airbi-logo"
 
@@ -38,7 +40,10 @@ const mainNav = [
   { href: "/chats", label: "Chats", icon: MessagesSquare },
   { href: "/reports", label: "Reports", icon: LayoutDashboard },
   { href: "/saved-queries", label: "Saved queries", icon: ScrollText },
+  { href: "/data-sources", label: "Data sources", icon: Database },
   { href: "/connections", label: "Connections", icon: Cable },
+  { href: "/teams", label: "Teams", icon: Users },
+  { href: "/billing", label: "Billing & usage", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const
 
@@ -83,7 +88,7 @@ export function SidebarNav({
   collapsed?: boolean
 }) {
   const pathname = usePathname() ?? "/"
-  const { connections, activeConnectionId, setActiveConnectionId, activeConnection } = useActiveConnection()
+  const { dataSources, activeDataSourceId, setActiveDataSourceId, activeDataSource } = useActiveDataSource()
   const { toggleSidebar } = useUI()
 
   return (
@@ -108,7 +113,7 @@ export function SidebarNav({
       {/* ── Data source picker ── */}
       <div className={cn("pb-3", collapsed ? "flex justify-center px-0" : "px-3")}>
         {collapsed ? (
-          <NavTooltip label={activeConnection?.name ?? "Data sources"} collapsed={collapsed}>
+          <NavTooltip label={activeDataSource?.name ?? "Data sources"} collapsed={collapsed}>
             <button className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] transition hover:bg-white/[0.06]">
               <Database className="size-4 text-muted-foreground" />
             </button>
@@ -117,10 +122,14 @@ export function SidebarNav({
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex min-h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium shadow-none outline-none transition hover:bg-white/[0.05]">
               <span className="flex min-w-0 flex-col items-start text-left leading-tight">
-                <span className="truncate">{activeConnection?.name ?? "Data sources"}</span>
-                {activeConnection && (
+                <span className="truncate">{activeDataSource?.name ?? "Data sources"}</span>
+                {activeDataSource && (
                   <span className="text-muted-foreground max-w-full truncate text-[10px] font-normal">
-                    {activeConnection.erpType}
+                    {activeDataSource.sourceKind === "excel"
+                      ? "Excel"
+                      : activeDataSource.connectionType === "smartsheet"
+                        ? "Smartsheet"
+                        : activeDataSource.connectionName ?? "Connection"}
                   </span>
                 )}
               </span>
@@ -131,32 +140,37 @@ export function SidebarNav({
               align="start"
             >
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="text-xs text-foreground/80">Data sources</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-xs text-foreground/80">Active data source</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
-                {connections.map((c) => (
+                {dataSources.map((ds) => (
                   <DropdownMenuItem
-                    key={c.id}
-                    onClick={() => setActiveConnectionId(c.id)}
+                    key={ds.id}
+                    onClick={() => setActiveDataSourceId(ds.id)}
                     className={cn(
                       "rounded-lg py-2 focus:bg-white/10 focus:text-foreground",
-                      activeConnectionId === c.id
+                      activeDataSourceId === ds.id
                         ? "bg-sky-500/15 text-foreground ring-1 ring-sky-500/25"
                         : "text-foreground hover:bg-white/[0.08]"
                     )}
                   >
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate font-medium">{c.name}</span>
+                      <span className="truncate font-medium">{ds.name}</span>
                       <span
                         className={cn(
                           "truncate text-[11px] font-normal",
-                          activeConnectionId === c.id ? "text-foreground/70" : "text-muted-foreground"
+                          activeDataSourceId === ds.id ? "text-foreground/70" : "text-muted-foreground"
                         )}
                       >
-                        {c.erpType}
+                        {ds.sourceKind === "excel" ? "Excel upload" : ds.connectionName ?? "Connection"}
                       </span>
                     </div>
                   </DropdownMenuItem>
                 ))}
+                {dataSources.length === 0 && (
+                  <DropdownMenuItem disabled className="text-muted-foreground text-xs">
+                    No data sources yet
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>

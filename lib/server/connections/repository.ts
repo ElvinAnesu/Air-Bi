@@ -6,11 +6,13 @@ export type DbConnectionRow = {
   id: string
   name: string
   erp_type: string
-  server: string
+  connection_type: string
+  server: string | null
   port: number | null
-  database_name: string
-  username: string
-  password_encrypted: string
+  database_name: string | null
+  username: string | null
+  password_encrypted: string | null
+  api_token_encrypted: string | null
   table_count: number
   connection_status: string
   last_sync_at: string | null
@@ -37,13 +39,16 @@ export function mapConnectionRow(row: DbConnectionRow): ErpConnection {
     ? row.connection_status
     : "disconnected") as ConnectionStatus
 
+  const connectionType = row.connection_type === "smartsheet" ? "smartsheet" : "mssql"
+
   return {
     id: row.id,
     name: row.name,
     erpType: row.erp_type,
-    server: row.server,
-    database: row.database_name,
-    username: row.username,
+    connectionType,
+    server: row.server ?? undefined,
+    database: row.database_name ?? undefined,
+    username: row.username ?? undefined,
     status,
     tableCount: row.table_count ?? 0,
     lastSync: formatLastSync(row.last_sync_at ?? row.updated_at),
@@ -52,12 +57,20 @@ export function mapConnectionRow(row: DbConnectionRow): ErpConnection {
 
 export function toMssqlConfig(row: Pick<DbConnectionRow, "server" | "port" | "database_name" | "username" | "password_encrypted">): MssqlConnectionConfig {
   return {
-    server: row.server,
-    database: row.database_name,
-    user: row.username,
-    password: row.password_encrypted,
+    server: row.server ?? "",
+    database: row.database_name ?? "",
+    user: row.username ?? "",
+    password: row.password_encrypted ?? "",
     port: row.port ?? undefined,
   }
+}
+
+export async function getTeamSmartsheetToken(teamId: string, connectionId: string): Promise<string | null> {
+  const { data, error } = await getTeamConnectionRow(teamId, connectionId)
+  if (error || !data) return null
+  const row = data as DbConnectionRow
+  if ((row.connection_type ?? "mssql") !== "smartsheet") return null
+  return row.api_token_encrypted
 }
 
 export async function getTeamConnectionRow(teamId: string, connectionId: string) {

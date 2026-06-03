@@ -13,14 +13,14 @@ import {
   type ConnectionCreatePayload,
   type ConnectionUpdatePayload,
 } from "@/lib/api/connections"
-import type { ErpConnection } from "@/types"
+import type { ConnectionType, ErpConnection } from "@/types"
 import { Loader2, PlugZap, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ConnectionFormProps = {
   mode?: "create" | "edit"
   connectionId?: string
-  initialValues?: Partial<ConnectionCreatePayload>
+  initialValues?: Partial<ConnectionCreatePayload> & { connectionType?: ConnectionType }
   onCancel?: () => void
   onSaved?: (connection: ErpConnection) => void
   className?: string
@@ -34,12 +34,17 @@ export function ConnectionForm({
   onSaved,
   className,
 }: ConnectionFormProps) {
+  const [connectionType, setConnectionType] = useState<ConnectionType>(
+    initialValues?.connectionType ?? "mssql"
+  )
   const [form, setForm] = useState<ConnectionCreatePayload>({
     name: initialValues?.name ?? "",
+    connectionType: initialValues?.connectionType ?? "mssql",
     server: initialValues?.server ?? "",
     database: initialValues?.database ?? "",
     user: initialValues?.user ?? "",
     password: "",
+    apiToken: "",
   })
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -49,12 +54,16 @@ export function ConnectionForm({
 
   useEffect(() => {
     if (initialValues) {
+      const type = initialValues.connectionType ?? "mssql"
+      setConnectionType(type)
       setForm({
         name: initialValues.name ?? "",
+        connectionType: type,
         server: initialValues.server ?? "",
         database: initialValues.database ?? "",
         user: initialValues.user ?? "",
         password: "",
+        apiToken: "",
       })
     }
   }, [initialValues])
@@ -65,21 +74,34 @@ export function ConnectionForm({
 
   const payload = (): ConnectionCreatePayload => ({
     name: form.name.trim(),
-    server: form.server.trim(),
-    database: form.database.trim(),
-    user: form.user.trim(),
+    connectionType,
+    server: form.server?.trim(),
+    database: form.database?.trim(),
+    user: form.user?.trim(),
     password: form.password,
+    apiToken: form.apiToken?.trim(),
   })
 
-  const validate = (requirePassword: boolean) => {
+  const validate = (requireSecrets: boolean) => {
     const p = payload()
-    if (!p.name || !p.server || !p.database || !p.user || (requirePassword && !p.password)) {
+    if (!p.name) {
+      setBanner({ variant: "error", title: "Missing fields", body: "Connection name is required." })
+      return false
+    }
+    if (connectionType === "smartsheet") {
+      if (requireSecrets && !p.apiToken) {
+        setBanner({ variant: "error", title: "Missing fields", body: "Smartsheet API token is required." })
+        return false
+      }
+      return true
+    }
+    if (!p.server || !p.database || !p.user || (requireSecrets && !p.password)) {
       setBanner({
         variant: "error",
         title: "Missing fields",
-        body: requirePassword
-          ? "Connection name, server IP, database name, username, and password are required."
-          : "Connection name, server IP, database name, and username are required.",
+        body: requireSecrets
+          ? "Server, database, username, and password are required."
+          : "Server, database, and username are required.",
       })
       return false
     }
@@ -95,13 +117,16 @@ export function ConnectionForm({
       setBanner({
         variant: "success",
         title: "Connection successful",
-        body: "SQL Server accepted the credentials.",
+        body:
+          connectionType === "smartsheet"
+            ? "Smartsheet accepted the API token."
+            : "SQL Server accepted the credentials.",
       })
     } catch (err) {
       setBanner({
         variant: "error",
         title: "Connection failed",
-        body: err instanceof Error ? err.message : "Could not reach the database.",
+        body: err instanceof Error ? err.message : "Could not reach the data source.",
       })
     } finally {
       setTesting(false)
@@ -109,21 +134,23 @@ export function ConnectionForm({
   }
 
   const handleSave = async () => {
-    const requirePassword = mode === "create"
-    if (!validate(requirePassword)) return
+    const requireSecrets = mode === "create"
+    if (!validate(requireSecrets)) return
     setSaving(true)
     setBanner(null)
     try {
       const p = payload()
       let connection: ErpConnection
       if (mode === "edit" && connectionId) {
-        const updates: ConnectionUpdatePayload = {
-          name: p.name,
-          server: p.server,
-          database: p.database,
-          user: p.user,
+        const updates: ConnectionUpdatePayload = { name: p.name }
+        if (connectionType === "smartsheet") {
+          if (p.apiToken) updates.apiToken = p.apiToken
+        } else {
+          updates.server = p.server
+          updates.database = p.database
+          updates.user = p.user
+          if (p.password) updates.password = p.password
         }
-        if (p.password) updates.password = p.password
         connection = await updateConnection(connectionId, updates)
       } else {
         connection = await createConnection(p)
@@ -170,7 +197,7 @@ export function ConnectionForm({
           {mode === "edit" ? "Edit connection" : "New connection"}
         </CardTitle>
         <CardDescription>
-          Connect to a SAP B1 MSSQL database. Credentials are saved securely to your team workspace.
+          Connect to MSSQL or Smartsheet. A matching data source is created automatically.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -180,69 +207,106 @@ export function ConnectionForm({
             <AlertDescription>{banner.body}</AlertDescription>
           </Alert>
         )}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="cname">Connection name</Label>
-            <Input
-              id="cname"
-              value={form.name}
-              onChange={(e) => update("name", e.target.value)}
-              placeholder="SAP B1 Production"
-              className="h-10 rounded-xl border-white/12 bg-black/30"
-            />
+
+        {mode === "create" && (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={connectionType === "mssql" ? "default" : "outline"}
+              size="sm"
+              className="rounded-xl"
+              onClick={() => {
+                setConnectionType("mssql")
+                setForm((f) => ({ ...f, connectionType: "mssql" }))
+              }}
+            >
+              MSSQL
+            </Button>
+            <Button
+              type="button"
+              variant={connectionType === "smartsheet" ? "default" : "outline"}
+              size="sm"
+              className="rounded-xl"
+              onClick={() => {
+                setConnectionType("smartsheet")
+                setForm((f) => ({ ...f, connectionType: "smartsheet" }))
+              }}
+            >
+              Smartsheet
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="ds-kind">Data source</Label>
-            <Input
-              id="ds-kind"
-              readOnly
-              value="SAP B1 MSSQL"
-              className="h-10 rounded-xl border-white/12 bg-black/20"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ip">Server IP</Label>
-            <Input
-              id="ip"
-              value={form.server}
-              onChange={(e) => update("server", e.target.value)}
-              placeholder="10.12.4.22"
-              className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="db">Database name</Label>
-            <Input
-              id="db"
-              value={form.database}
-              onChange={(e) => update("database", e.target.value)}
-              placeholder="SBO_DEMO_US"
-              className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="user">Username</Label>
-            <Input
-              id="user"
-              value={form.user}
-              onChange={(e) => update("user", e.target.value)}
-              autoComplete="username"
-              className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="pass">Password</Label>
-            <Input
-              id="pass"
-              type="password"
-              value={form.password}
-              onChange={(e) => update("password", e.target.value)}
-              autoComplete="current-password"
-              placeholder={mode === "edit" ? "Leave blank to keep current password" : ""}
-              className="h-10 rounded-xl border-white/12 bg-black/30"
-            />
-          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="cname">Connection name</Label>
+          <Input
+            id="cname"
+            value={form.name}
+            onChange={(e) => update("name", e.target.value)}
+            placeholder={connectionType === "smartsheet" ? "Marketing Smartsheet" : "SAP B1 Production"}
+            className="h-10 rounded-xl border-white/12 bg-black/30"
+          />
         </div>
+
+        {connectionType === "smartsheet" ? (
+          <div className="space-y-2">
+            <Label htmlFor="token">API access token</Label>
+            <Input
+              id="token"
+              type="password"
+              value={form.apiToken ?? ""}
+              onChange={(e) => update("apiToken", e.target.value)}
+              placeholder={mode === "edit" ? "Leave blank to keep current token" : ""}
+              className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ip">Server IP</Label>
+              <Input
+                id="ip"
+                value={form.server ?? ""}
+                onChange={(e) => update("server", e.target.value)}
+                placeholder="10.12.4.22"
+                className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="db">Database name</Label>
+              <Input
+                id="db"
+                value={form.database ?? ""}
+                onChange={(e) => update("database", e.target.value)}
+                placeholder="SBO_DEMO_US"
+                className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="user">Username</Label>
+              <Input
+                id="user"
+                value={form.user ?? ""}
+                onChange={(e) => update("user", e.target.value)}
+                autoComplete="username"
+                className="h-10 rounded-xl border-white/12 bg-black/30 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pass">Password</Label>
+              <Input
+                id="pass"
+                type="password"
+                value={form.password ?? ""}
+                onChange={(e) => update("password", e.target.value)}
+                autoComplete="current-password"
+                placeholder={mode === "edit" ? "Leave blank to keep current password" : ""}
+                className="h-10 rounded-xl border-white/12 bg-black/30"
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2 pt-2">
           <Button
             type="button"

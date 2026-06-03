@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase/admin"
+import { createSupabaseAuthClient } from "@/lib/supabase/auth-client"
 import { setAuthCookies } from "@/lib/supabase/auth"
 
 export async function POST(req: NextRequest) {
@@ -12,36 +12,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 })
   }
 
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+  const supabaseAuth = createSupabaseAuthClient()
+  const { data, error } = await supabaseAuth.auth.signUp({
     email,
     password,
-    email_confirm: true,          // skip email verification for now
-    user_metadata: { full_name: fullName ?? email.split("@")[0] },
+    options: {
+      data: { full_name: fullName ?? email.split("@")[0] },
+    },
   })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
-  // Sign in immediately to get a session
-  const { data: session, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-    email,
-    password,
-  })
+  let session = data.session
 
-  if (signInError || !session.session) {
-    return NextResponse.json(
-      { error: "Account created but sign-in failed. Please sign in manually." },
-      { status: 500 }
-    )
+  if (!session) {
+    const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (signInError || !signInData.session) {
+      return NextResponse.json(
+        { error: "Account created but sign-in failed. Please sign in manually." },
+        { status: 500 }
+      )
+    }
+
+    session = signInData.session
   }
 
   const res = NextResponse.json({ ok: true, userId: data.user?.id })
-  setAuthCookies(
-    res,
-    session.session.access_token,
-    session.session.refresh_token,
-    session.session.expires_in
-  )
+  setAuthCookies(res, session.access_token, session.refresh_token, session.expires_in)
   return res
 }

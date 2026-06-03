@@ -1,12 +1,12 @@
 import Link from "next/link"
 import { Instrument_Serif } from "next/font/google"
-import { buttonVariants } from "@/components/ui/button"
 import {
   CHART_TYPES_NOTE,
   DATA_SOURCES_NOTE,
   PRICING_PLANS,
 } from "@/lib/marketing/pricing-plans"
 import { MarketingBackground, MarketingFooter, MarketingHeader } from "@/components/marketing/marketing-shell"
+import { PricingPlanCta } from "@/components/marketing/pricing-plan-cta"
 import { cn } from "@/lib/utils"
 import { Check, Database, BarChart3 } from "lucide-react"
 
@@ -75,18 +75,7 @@ export function PricingPageContent() {
                 ))}
               </ul>
 
-              <Link
-                href="/login"
-                className={cn(
-                  buttonVariants({ size: "lg" }),
-                  "h-11 w-full rounded-xl",
-                  plan.highlighted
-                    ? "bg-white text-black hover:bg-white/90"
-                    : "border border-white/15 bg-transparent text-white hover:bg-white/8"
-                )}
-              >
-                {plan.cta}
-              </Link>
+              <PricingPlanCta plan={plan} />
             </div>
           ))}
         </section>

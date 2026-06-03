@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useActiveDataSource } from "@/lib/context/active-data-source"
 import { useActiveConnection } from "@/lib/context/active-connection"
 import { useAuth } from "@/lib/context/auth-context"
 import { LogOut, Menu, Moon, Plus, Search, Sun } from "lucide-react"
@@ -24,7 +25,10 @@ const titles: Record<string, string> = {
   "/chats": "Chats",
   "/reports": "Reports",
   "/saved-queries": "Saved queries",
+  "/data-sources": "Data sources",
   "/connections": "Connections",
+  "/teams": "Teams",
+  "/billing": "Billing & usage",
   "/settings": "Settings",
 }
 
@@ -40,7 +44,13 @@ function useDarkModeToggle() {
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname()
+  const { dataSources, activeDataSource } = useActiveDataSource()
   const { connections } = useActiveConnection()
+
+  const dataSourceDetailTitle =
+    pathname?.startsWith("/data-sources/") && pathname !== "/data-sources"
+      ? dataSources.find((d) => pathname === `/data-sources/${d.id}`)?.name
+      : undefined
 
   const connectionDetailTitle =
     pathname?.startsWith("/connections/") && pathname !== "/connections"
@@ -49,10 +59,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   const title =
     titles[pathname ?? ""] ??
+    dataSourceDetailTitle ??
     connectionDetailTitle ??
     (pathname?.startsWith("/chats") ? titles["/chats"] : undefined) ??
     "AirBI"
-  const { activeConnection } = useActiveConnection()
   const { user, teamName, signOut } = useAuth()
   const { isDark, toggle } = useDarkModeToggle()
 
@@ -94,12 +104,12 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         >
           <Plus className="size-4" />
         </Button>
-        {activeConnection && (
+        {activeDataSource && (
           <Badge
             variant="outline"
             className="hidden border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-200 sm:inline-flex"
           >
-            {activeConnection.name}
+            {activeDataSource.name}
           </Badge>
         )}
         <Button

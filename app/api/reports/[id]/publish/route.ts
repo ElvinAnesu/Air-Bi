@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { requireAuth } from "@/lib/supabase/auth"
+import { planLimitResponse } from "@/lib/server/billing/enforce"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 type Params = { params: Promise<{ id: string }> }
@@ -22,6 +23,11 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (fetchError || !existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  if (publish && !existing.is_published) {
+    const limitResponse = await planLimitResponse(auth!, "published_reports", { excludeReportId: id })
+    if (limitResponse) return limitResponse
   }
 
   const now = new Date().toISOString()

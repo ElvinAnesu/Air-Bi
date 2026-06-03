@@ -23,16 +23,48 @@ export type ErpTable = {
 
 export type ConnectionStatus = "connected" | "disconnected" | "syncing" | "error"
 
+export type ConnectionType = "mssql" | "smartsheet"
+
 export type ErpConnection = {
   id: string
   name: string
   erpType: string
+  connectionType: ConnectionType
   status: ConnectionStatus
   tableCount: number
   lastSync: string
   server?: string
   database?: string
   username?: string
+}
+
+export type DataSourceKind = "connection" | "excel"
+
+export type DataSource = {
+  id: string
+  name: string
+  description?: string
+  sourceKind: DataSourceKind
+  connectionId?: string
+  connectionName?: string
+  connectionType?: ConnectionType
+  connectionStatus?: ConnectionStatus
+  excelFileName?: string
+  tableCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type DataSourceTable = {
+  id: string
+  dataSourceId: string
+  externalSchema: string
+  externalName: string
+  displayName?: string
+  columns: ErpColumn[]
+  sampleRows: Record<string, string | number | null>[]
+  rowCount: number
+  snapshotAt?: string
 }
 
 export type DashboardKpi = {

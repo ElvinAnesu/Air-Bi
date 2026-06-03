@@ -85,7 +85,7 @@ export default function ConnectionsPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
             <p className="text-muted-foreground mt-1 max-w-xl text-sm">
-              Connect SAP B1 MSSQL databases. Connections are saved securely to your team workspace.
+              Connect MSSQL databases or Smartsheet. Each connection gets a matching data source for curated reporting.
             </p>
           </div>
           <Button
@@ -159,6 +159,7 @@ export default function ConnectionsPage() {
               connectionId={editTarget.id}
               initialValues={{
                 name: editTarget.name,
+                connectionType: editTarget.connectionType,
                 server: editTarget.server ?? "",
                 database: editTarget.database ?? "",
                 user: editTarget.username ?? "",

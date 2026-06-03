@@ -45,6 +45,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (body.rows !== undefined) updates.rows = body.rows
   if (body.rowCount !== undefined) updates.row_count = body.rowCount
   if (body.connectionId !== undefined) updates.connection_id = body.connectionId
+  if (body.dataSourceId !== undefined) updates.data_source_id = body.dataSourceId
   if (body.chatId !== undefined) updates.chat_id = body.chatId
 
   const { data, error } = await supabaseAdmin

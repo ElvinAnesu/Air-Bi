@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import type { ChatMessageModel } from "@/types"
-import { useActiveConnection } from "@/lib/context/active-connection"
+import { useRestoreActiveDataSource } from "@/lib/hooks/use-restore-active-data-source"
 import { WorkspaceView } from "@/components/workspace/workspace-view"
 import type { ReportData } from "@/components/workspace/report-panel"
 import { Button } from "@/components/ui/button"
@@ -20,22 +20,26 @@ type ApiReport = {
   rows: Record<string, string | number | null>[]
   row_count: number
   connection_id: string | null
+  data_source_id: string | null
   chat_id: string | null
 }
 
 type ApiChat = {
   id: string
+  connection_id: string | null
+  data_source_id: string | null
   messages: { id: string; role: "user" | "assistant"; content: string }[]
 }
 
 export default function EditReportPage() {
   const params = useParams()
   const id = typeof params.id === "string" ? params.id : ""
-  const { setActiveConnectionId, connections, loadingConnections } = useActiveConnection()
 
   const [report, setReport] = useState<ApiReport | null>(null)
   const [messages, setMessages] = useState<ChatMessageModel[]>([])
   const [chatId, setChatId] = useState<string | null>(null)
+  const [chatDataSourceId, setChatDataSourceId] = useState<string | null>(null)
+  const [chatConnectionId, setChatConnectionId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -61,6 +65,8 @@ export default function EditReportPage() {
           if (chatRes.ok) {
             const chat = (await chatRes.json()) as ApiChat
             setChatId(chat.id)
+            setChatDataSourceId(chat.data_source_id)
+            setChatConnectionId(chat.connection_id)
             setMessages(
               chat.messages.map((m) => ({
                 id: m.id,
@@ -81,11 +87,11 @@ export default function EditReportPage() {
     void load()
   }, [id])
 
-  useEffect(() => {
-    if (!report?.connection_id || loadingConnections) return
-    const exists = connections.some((c) => c.id === report.connection_id)
-    if (exists) setActiveConnectionId(report.connection_id)
-  }, [report?.connection_id, connections, loadingConnections, setActiveConnectionId])
+  useRestoreActiveDataSource({
+    ready: loaded && !!report,
+    dataSourceId: chatDataSourceId ?? report?.data_source_id ?? null,
+    connectionId: chatConnectionId ?? report?.connection_id ?? null,
+  })
 
   if (!loaded) {
     return (

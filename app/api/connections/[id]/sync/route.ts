@@ -8,11 +8,12 @@ import {
   type DbConnectionRow,
 } from "@/lib/server/connections/repository"
 import { countMssqlTables, testMssqlConnection } from "@/lib/server/mssql/client"
+import { countSmartsheetSheets, testSmartsheetConnection } from "@/lib/server/smartsheet/client"
 
 type Params = { params: Promise<{ id: string }> }
 
 const CONNECTION_SELECT =
-  "id, name, erp_type, server, port, database_name, username, table_count, connection_status, last_sync_at, created_at, updated_at"
+  "id, name, erp_type, connection_type, server, port, database_name, username, table_count, connection_status, last_sync_at, created_at, updated_at"
 
 export async function POST(req: NextRequest, { params }: Params) {
   const { auth, errorResponse } = await requireAuth(req)
@@ -22,8 +23,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { data: existing } = await getTeamConnectionRow(auth!.teamId!, id)
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  const config = await getTeamMssqlConnection(auth!.teamId!, id)
-  if (!config) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  const connection = existing as DbConnectionRow
+  const connectionType = connection.connection_type ?? "mssql"
 
   await supabaseAdmin
     .from("connections")
@@ -32,8 +33,20 @@ export async function POST(req: NextRequest, { params }: Params) {
     .eq("team_id", auth!.teamId)
 
   try {
-    await testMssqlConnection(config)
-    const tableCount = await countMssqlTables(config)
+    let tableCount = 0
+
+    if (connectionType === "smartsheet") {
+      const token = connection.api_token_encrypted
+      if (!token) throw new Error("Smartsheet token missing")
+      await testSmartsheetConnection(token)
+      tableCount = await countSmartsheetSheets(token)
+    } else {
+      const config = await getTeamMssqlConnection(auth!.teamId!, id)
+      if (!config) return NextResponse.json({ error: "Not found" }, { status: 404 })
+      await testMssqlConnection(config)
+      tableCount = await countMssqlTables(config)
+    }
+
     const now = new Date().toISOString()
 
     const { data, error } = await supabaseAdmin

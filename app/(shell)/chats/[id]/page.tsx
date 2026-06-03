@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import type { ChatMessageModel } from "@/types"
+import { useRestoreActiveDataSource } from "@/lib/hooks/use-restore-active-data-source"
 import { WorkspaceView } from "@/components/workspace/workspace-view"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Loader2 } from "lucide-react"
@@ -11,6 +12,8 @@ import Link from "next/link"
 type ApiChat = {
   id: string
   title: string
+  connection_id: string | null
+  data_source_id: string | null
   messages: { id: string; role: "user" | "assistant"; content: string; created_at: string }[]
 }
 
@@ -30,6 +33,12 @@ export default function ChatDetailPage() {
       .then((data) => setChat(data))
       .catch(() => setChat(null))
   }, [id])
+
+  useRestoreActiveDataSource({
+    ready: chat !== undefined && chat !== null,
+    dataSourceId: chat?.data_source_id ?? null,
+    connectionId: chat?.connection_id ?? null,
+  })
 
   if (chat === undefined) {
     return (

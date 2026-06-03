@@ -1,12 +1,14 @@
-import type { ConnectionStatus, ErpConnection, ErpTable } from "@/types"
+import type { ConnectionType, ConnectionStatus, ErpConnection, ErpTable } from "@/types"
 import type { SchemaTableSummary } from "@/types"
 
 export type ConnectionCreatePayload = {
   name: string
-  server: string
-  database: string
-  user: string
-  password: string
+  connectionType?: ConnectionType
+  server?: string
+  database?: string
+  user?: string
+  password?: string
+  apiToken?: string
 }
 
 export type ConnectionUpdatePayload = {
@@ -15,12 +17,14 @@ export type ConnectionUpdatePayload = {
   database?: string
   user?: string
   password?: string
+  apiToken?: string
 }
 
 type ApiConnectionRow = {
   id: string
   name: string
   erpType: string
+  connectionType?: ConnectionType
   server?: string
   database?: string
   username?: string
@@ -42,6 +46,7 @@ export function mapApiConnection(row: ApiConnectionRow): ErpConnection {
     id: row.id,
     name: row.name,
     erpType: row.erpType,
+    connectionType: row.connectionType ?? "mssql",
     server: row.server,
     database: row.database,
     username: row.username,

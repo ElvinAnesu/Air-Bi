@@ -103,6 +103,7 @@ type ReportPanelProps = {
   hideSql?: boolean
   chatId?: string | null
   connectionId?: string | null
+  dataSourceId?: string | null
   savedReportId?: string | null
 }
 
@@ -113,6 +114,7 @@ export function ReportPanel({
   hideSql = false,
   chatId = null,
   connectionId = null,
+  dataSourceId = null,
   savedReportId = null,
 }: ReportPanelProps) {
   const [page, setPage] = useState(1)
@@ -143,6 +145,7 @@ export function ReportPanel({
         rows: report.rows,
         rowCount: report.rowCount,
         connectionId: connectionId ?? null,
+        dataSourceId: dataSourceId ?? null,
         chatId: chatId ?? null,
       }
 

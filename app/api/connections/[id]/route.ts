@@ -6,7 +6,7 @@ import { getTeamConnectionRow, mapConnectionRow, type DbConnectionRow } from "@/
 type Params = { params: Promise<{ id: string }> }
 
 const CONNECTION_SELECT =
-  "id, name, erp_type, server, port, database_name, username, table_count, connection_status, last_sync_at, created_at, updated_at"
+  "id, name, erp_type, connection_type, server, port, database_name, username, table_count, connection_status, last_sync_at, created_at, updated_at"
 
 export async function GET(req: NextRequest, { params }: Params) {
   const { auth, errorResponse } = await requireAuth(req)
@@ -36,6 +36,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (body.database) updates.database_name = body.database
   if (body.username ?? body.user) updates.username = body.username ?? body.user
   if (body.password) updates.password_encrypted = body.password
+  if (body.apiToken ?? body.api_token) updates.api_token_encrypted = body.apiToken ?? body.api_token
 
   const { data, error } = await supabaseAdmin
     .from("connections")

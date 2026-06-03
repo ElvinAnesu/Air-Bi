@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireAuth } from "@/lib/supabase/auth"
-import { getTeamMssqlConnection } from "@/lib/server/connections/repository"
-import { getMssqlTablePreview } from "@/lib/server/mssql/client"
+import { getTeamConnectionRow, getTeamMssqlConnection, type DbConnectionRow } from "@/lib/server/connections/repository"
+import {
+  fetchLiveTableRows,
+  getDataSourceTableRow,
+  getTeamDataSourceRow,
+  isLiveConnection,
+  listDataSourceTables,
+} from "@/lib/server/data-sources/repository"
+import { executeTabularQuery, type TabularQuery } from "@/lib/server/query/tabular"
+import type { DbDataSourceRow, DbDataSourceTableRow } from "@/lib/server/data-sources/types"
 import sql from "mssql"
 import type { MssqlConnectionConfig } from "@/lib/server/connections/types"
 
-type SelectedTable = { schema: string; name: string }
+type SelectedTable = { id?: string; schema: string; name: string }
 
 type ChatRequestBody = {
   message: string
-  connectionId: string
+  dataSourceId?: string
+  connectionId?: string
   selectedTables: SelectedTable[]
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
 }
@@ -21,15 +30,25 @@ type ClaudeClarifyResponse = {
   questions: string[]
 }
 
-type ClaudeReportResponse = {
+type ClaudeSqlReportResponse = {
   type: "report"
+  mode?: "sql"
   sql: string
   explanation: string
   chartType: "bar" | "pie" | "line" | "table"
   title: string
 }
 
-type ClaudeResponse = ClaudeClarifyResponse | ClaudeReportResponse
+type ClaudeTabularReportResponse = {
+  type: "report"
+  mode: "tabular"
+  query: TabularQuery
+  explanation: string
+  chartType: "bar" | "pie" | "line" | "table"
+  title: string
+}
+
+type ClaudeResponse = ClaudeClarifyResponse | ClaudeSqlReportResponse | ClaudeTabularReportResponse
 
 function poolConfig(config: MssqlConnectionConfig) {
   return {
@@ -70,112 +89,163 @@ async function runSql(
   }
 }
 
+async function resolveDataSource(teamId: string, dataSourceId?: string, connectionId?: string) {
+  if (dataSourceId) {
+    const { data, error } = await getTeamDataSourceRow(teamId, dataSourceId)
+    if (error || !data) return null
+    return data as DbDataSourceRow
+  }
+
+  if (connectionId) {
+    const { supabaseAdmin } = await import("@/lib/supabase/admin")
+    const { data: byConn } = await supabaseAdmin
+      .from("data_sources")
+      .select("id, team_id, created_by, name, description, source_kind, connection_id, excel_file_name, excel_storage_path, created_at, updated_at")
+      .eq("team_id", teamId)
+      .eq("connection_id", connectionId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    if (byConn) return byConn as DbDataSourceRow
+  }
+
+  return null
+}
+
+async function loadSelectedTableRows(
+  teamId: string,
+  dataSource: DbDataSourceRow,
+  connection: DbConnectionRow | null,
+  selected: SelectedTable[]
+): Promise<Array<{ table: DbDataSourceTableRow; rows: Record<string, string | number | null>[] }>> {
+  const allTables = await listDataSourceTables(dataSource.id)
+  const live = isLiveConnection(dataSource, connection)
+
+  const resolved: DbDataSourceTableRow[] = []
+  for (const sel of selected) {
+    if (sel.id) {
+      const { data } = await getDataSourceTableRow(dataSource.id, sel.id)
+      if (data) resolved.push(data as DbDataSourceTableRow)
+    } else {
+      const match = allTables.find(
+        (t) => t.externalSchema === sel.schema && t.externalName === sel.name
+      )
+      if (match) {
+        const { data } = await getDataSourceTableRow(dataSource.id, match.id)
+        if (data) resolved.push(data as DbDataSourceTableRow)
+      }
+    }
+  }
+
+  const result: Array<{ table: DbDataSourceTableRow; rows: Record<string, string | number | null>[] }> = []
+  for (const table of resolved) {
+    let rows: Record<string, string | number | null>[]
+    if (live && dataSource.source_kind === "connection") {
+      try {
+        rows = await fetchLiveTableRows(teamId, dataSource, table.external_schema, table.external_name)
+      } catch {
+        rows = Array.isArray(table.rows_json) ? table.rows_json : []
+      }
+    } else {
+      rows = Array.isArray(table.rows_json) ? table.rows_json : []
+    }
+    result.push({ table, rows })
+  }
+  return result
+}
+
+function buildSchemaContext(
+  tables: Array<{ table: DbDataSourceTableRow; rows: Record<string, string | number | null>[] }>
+) {
+  return tables
+    .map(({ table }) => {
+      const cols = Array.isArray(table.columns_json) ? table.columns_json : []
+      const colList = cols
+        .map((c) => `  - ${c.name} (${c.type}${c.description ? `, ${c.description}` : ""})`)
+        .join("\n")
+      return `Table: [${table.external_schema}].[${table.external_name}]\nColumns:\n${colList}`
+    })
+    .join("\n\n")
+}
+
 export async function POST(request: NextRequest) {
   const { auth, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   const body = (await request.json()) as ChatRequestBody
-  const { message, connectionId, selectedTables, conversationHistory = [] } = body
+  const { message, dataSourceId, connectionId, selectedTables, conversationHistory = [] } = body
 
   if (!message?.trim()) {
     return NextResponse.json({ error: "Message is required" }, { status: 400 })
   }
-  if (!connectionId) {
-    return NextResponse.json({ error: "No database connection selected" }, { status: 400 })
+
+  const dataSource = await resolveDataSource(auth!.teamId!, dataSourceId, connectionId)
+  if (!dataSource) {
+    return NextResponse.json({ error: "No data source selected" }, { status: 400 })
   }
 
-  const stored = await getTeamMssqlConnection(auth!.teamId!, connectionId)
-  if (!stored) {
-    return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+  let connection: DbConnectionRow | null = null
+  if (dataSource.connection_id) {
+    const { data } = await getTeamConnectionRow(auth!.teamId!, dataSource.connection_id)
+    connection = (data as DbConnectionRow) ?? null
   }
 
-  // Fetch schemas for selected tables
-  let schemaContext = ""
-  if (selectedTables.length > 0) {
-    const tableSchemas = await Promise.all(
-      selectedTables.map(async (t) => {
-        try {
-          const table = await getMssqlTablePreview(stored, t.schema, t.name)
-          const colList = table.columns
-            .map((c) => `  - ${c.name} (${c.type}${c.description === "Nullable" ? ", nullable" : ""})`)
-            .join("\n")
-          return `Table: [${t.schema}].[${t.name}]\nColumns:\n${colList}`
-        } catch {
-          return `Table: [${t.schema}].[${t.name}] (schema unavailable)`
-        }
-      })
-    )
-    schemaContext = tableSchemas.join("\n\n")
-  }
+  const useLiveSql =
+    dataSource.source_kind === "connection" &&
+    connection?.connection_type !== "smartsheet" &&
+    isLiveConnection(dataSource, connection)
 
-  // Detect whether the user is clearly answering a previous clarification round
-  const isAnsweringClarification =
-    conversationHistory.length >= 2 &&
-    conversationHistory[conversationHistory.length - 1].role === "assistant" &&
-    conversationHistory[conversationHistory.length - 1].content.includes("?")
+  const tableData = await loadSelectedTableRows(auth!.teamId!, dataSource, connection, selectedTables)
+  const schemaContext = buildSchemaContext(tableData)
 
-  const systemPrompt = `You are an expert SQL analyst for enterprise ERP and business databases on Microsoft SQL Server.
-The user has connected a database${schemaContext ? " and selected the following tables as context" : ""}.
+  const sqlSystemPrompt = `You are an expert SQL analyst for enterprise ERP and business databases on Microsoft SQL Server.
+The user is querying a data source${schemaContext ? " with the following curated tables" : ""}.
 
 ${schemaContext ? `DATABASE SCHEMA:\n${schemaContext}` : "No specific tables were selected. Use your best judgment based on the user's question."}
 
-## YOUR JOB
-
-Decide whether you have ENOUGH information to write an accurate, non-hallucinated SQL query.
-
-### When to ask clarifying questions (type: "clarify")
-Ask ONLY when one or more of these critical details are missing and cannot be safely assumed:
-- Date range or time period (e.g. "this month" is OK to assume as current month; "recently" is not clear enough)
-- Specific filter values you cannot infer (e.g. a specific warehouse code, customer segment, product category)
-- Ambiguous metric (e.g. "revenue" could mean DocTotal, LineTotal, net amount — ask which column)
-- Grouping or breakdown dimension that is unclear
-- Whether the user wants a summary or row-level detail
-
-Do NOT ask questions if:
-- The conversation history already contains the answers
-- The user is clearly answering your previous questions
-- The request is straightforward and the schema makes the intent obvious
-- You have enough context to make a reasonable, non-hallucinated query
-
-Ask a maximum of 3 short, specific questions. Never ask for information you already have.
-
-### When to generate the report (type: "report")
-- You have all the information needed
-- The user just answered your previous clarifying questions
-- The request is clear enough to write a confident, accurate query
-
-## RESPONSE FORMAT
-
-Respond ONLY with valid JSON — no markdown, no extra text.
+Respond ONLY with valid JSON.
 
 If you need clarification:
-{
-  "type": "clarify",
-  "message": "One sentence explaining what you need before generating the report.",
-  "questions": ["Specific question 1?", "Specific question 2?"]
-}
+{ "type": "clarify", "message": "...", "questions": ["..."] }
 
-If you are ready to generate:
+If ready to generate:
+{ "type": "report", "mode": "sql", "sql": "SELECT ...", "explanation": "...", "chartType": "bar", "title": "..." }
+
+SQL rules: SELECT only, valid T-SQL, bracket-quoted identifiers, TOP 500 default.
+chartType: bar | pie | line | table`
+
+  const tabularSystemPrompt = `You are an expert data analyst working with tabular datasets (Excel, Smartsheet, or offline snapshots).
+The user is querying a data source${schemaContext ? " with the following curated tables" : ""}.
+
+${schemaContext ? `TABLE SCHEMA:\n${schemaContext}` : "No specific tables were selected."}
+
+Respond ONLY with valid JSON.
+
+If you need clarification:
+{ "type": "clarify", "message": "...", "questions": ["..."] }
+
+If ready to generate:
 {
   "type": "report",
-  "sql": "SELECT ...",
-  "explanation": "Plain English explanation of what the data shows.",
+  "mode": "tabular",
+  "query": {
+    "sourceTable": "schema.tableName",
+    "filters": [{ "column": "Col", "op": "eq|contains|gt|lt|gte|lte", "value": "..." }],
+    "groupBy": ["Col"],
+    "aggregations": [{ "column": "Amount", "fn": "sum|count|avg|min|max", "alias": "Total" }],
+    "sortBy": { "column": "Col", "direction": "asc|desc" },
+    "limit": 500,
+    "select": ["Col1", "Col2"]
+  },
+  "explanation": "...",
   "chartType": "bar",
-  "title": "Short report title"
+  "title": "..."
 }
 
-SQL rules:
-- SELECT only — no INSERT, UPDATE, DELETE, DROP, DDL
-- Valid T-SQL syntax (GETDATE(), TOP N, etc.)
-- Use exact column names from the schema
-- Use TOP 500 or similar limits unless the user asks for all rows
-- Always use bracket-quoted identifiers: [schema].[table]
+Use exact column names from the schema. sourceTable must match one of the table names shown (schema.name format).
+chartType: bar | pie | line | table`
 
-chartType must be one of: "bar", "pie", "line", "table"
-- "table" → detail rows
-- "bar" → comparisons across categories
-- "pie" → proportions of a whole
-- "line" → trends over time`
+  const systemPrompt = useLiveSql ? sqlSystemPrompt : tabularSystemPrompt
 
   const apiKey = process.env.CLAUDE_API_KEY
   if (!apiKey) {
@@ -212,39 +282,76 @@ chartType must be one of: "bar", "pie", "line", "table"
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 
-  // ── Clarify response — return questions to the client, no SQL execution ──
   if (claudeResponse.type === "clarify") {
     const questionList = claudeResponse.questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
     const fullMessage = `${claudeResponse.message}\n\n${questionList}`
     return NextResponse.json({ type: "clarify", message: fullMessage })
   }
 
-  // ── Report response — execute SQL ────────────────────────────────────────
-  let queryResult: { columns: string[]; rows: Record<string, string | number | null>[] }
-  try {
-    queryResult = await runSql(stored, claudeResponse.sql)
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : "SQL execution failed"
-    return NextResponse.json(
-      {
+  if (useLiveSql && (!claudeResponse.mode || claudeResponse.mode === "sql") && "sql" in claudeResponse) {
+    const mssql = await getTeamMssqlConnection(auth!.teamId!, dataSource.connection_id!)
+    if (!mssql) {
+      return NextResponse.json({ error: "MSSQL connection not found" }, { status: 404 })
+    }
+
+    try {
+      const queryResult = await runSql(mssql, claudeResponse.sql)
+      return NextResponse.json({
         type: "report",
-        error: `SQL execution failed: ${errMsg}`,
-        sql: claudeResponse.sql,
-        explanation: claudeResponse.explanation,
         title: claudeResponse.title,
-      },
-      { status: 422 }
-    )
+        explanation: claudeResponse.explanation,
+        sql: claudeResponse.sql,
+        chartType: claudeResponse.chartType,
+        columns: queryResult.columns,
+        rows: queryResult.rows,
+        rowCount: queryResult.rows.length,
+      })
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "SQL execution failed"
+      return NextResponse.json(
+        {
+          type: "report",
+          error: `SQL execution failed: ${errMsg}`,
+          sql: claudeResponse.sql,
+          explanation: claudeResponse.explanation,
+          title: claudeResponse.title,
+        },
+        { status: 422 }
+      )
+    }
   }
 
-  return NextResponse.json({
-    type: "report",
-    title: claudeResponse.title,
-    explanation: claudeResponse.explanation,
-    sql: claudeResponse.sql,
-    chartType: claudeResponse.chartType,
-    columns: queryResult.columns,
-    rows: queryResult.rows,
-    rowCount: queryResult.rows.length,
-  })
+  const tabularResponse = claudeResponse as ClaudeTabularReportResponse
+  const sourceKey = tabularResponse.query.sourceTable
+  const match = tableData.find(
+    (t) =>
+      `${t.table.external_schema}.${t.table.external_name}` === sourceKey ||
+      t.table.external_name === sourceKey
+  )
+
+  if (!match && tableData.length === 1) {
+    // default to single selected table
+  }
+
+  const target = match ?? tableData[0]
+  if (!target) {
+    return NextResponse.json({ error: "No table data available for query" }, { status: 422 })
+  }
+
+  try {
+    const queryResult = executeTabularQuery(target.rows, tabularResponse.query)
+    return NextResponse.json({
+      type: "report",
+      title: tabularResponse.title,
+      explanation: tabularResponse.explanation,
+      sql: JSON.stringify(tabularResponse.query),
+      chartType: tabularResponse.chartType,
+      columns: queryResult.columns,
+      rows: queryResult.rows,
+      rowCount: queryResult.rows.length,
+    })
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "Query execution failed"
+    return NextResponse.json({ error: errMsg }, { status: 422 })
+  }
 }

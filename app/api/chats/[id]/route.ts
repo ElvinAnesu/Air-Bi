@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const { data: chat, error } = await supabaseAdmin
     .from("chats")
-    .select("id, title, connection_id, created_at, updated_at")
+    .select("id, title, connection_id, data_source_id, created_at, updated_at")
     .eq("id", id)
     .eq("team_id", auth!.teamId)   // team isolation
     .single()

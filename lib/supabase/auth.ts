@@ -3,6 +3,7 @@ import { supabaseAdmin } from "./admin"
 
 export const ACCESS_TOKEN_COOKIE = "sb-access-token"
 export const REFRESH_TOKEN_COOKIE = "sb-refresh-token"
+export const ACTIVE_TEAM_COOKIE = "airbi-active-team-id"
 
 /** Cookie options shared between sign-in and sign-out */
 const COOKIE_OPTS = {
@@ -50,19 +51,36 @@ async function fetchTeamName(teamId: string): Promise<string | null> {
   return data?.name ?? null
 }
 
-async function resolveTeamForUser(userId: string) {
-  const { data: membership, error } = await supabaseAdmin
+async function resolveTeamForUser(userId: string, req?: NextRequest | Request) {
+  const { data: memberships, error } = await supabaseAdmin
     .from("team_members")
-    .select("team_id, role")
+    .select("team_id, role, joined_at")
     .eq("user_id", userId)
     .order("joined_at", { ascending: true })
-    .limit(1)
-    .maybeSingle()
 
   if (error) {
     console.error("Failed to load team membership:", error.message)
     return null
   }
+
+  if (!memberships?.length) return null
+
+  const preferredTeamId =
+    req instanceof NextRequest
+      ? req.cookies.get(ACTIVE_TEAM_COOKIE)?.value
+      : req
+        ? (() => {
+            const cookieHeader = req.headers.get("cookie") ?? ""
+            const match = cookieHeader.match(new RegExp(`${ACTIVE_TEAM_COOKIE}=([^;]+)`))
+            return match ? decodeURIComponent(match[1]) : null
+          })()
+        : null
+
+  const membership =
+    (preferredTeamId &&
+      isValidUuid(preferredTeamId) &&
+      memberships.find((row) => row.team_id === preferredTeamId)) ||
+    memberships[0]
 
   if (!membership?.team_id || !isValidUuid(membership.team_id)) {
     return null
@@ -88,7 +106,7 @@ export async function getAuthUser(req: NextRequest | Request): Promise<AuthConte
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data.user) return null
 
-  const team = await resolveTeamForUser(data.user.id)
+  const team = await resolveTeamForUser(data.user.id, req)
   if (!team) return null
 
   let subscription: AuthContext["subscription"] = null
@@ -128,6 +146,14 @@ export function setAuthCookies(
 export function clearAuthCookies(res: NextResponse) {
   res.cookies.set(ACCESS_TOKEN_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 })
   res.cookies.set(REFRESH_TOKEN_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 })
+  res.cookies.set(ACTIVE_TEAM_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 })
+}
+
+export function setActiveTeamCookie(res: NextResponse, teamId: string) {
+  res.cookies.set(ACTIVE_TEAM_COOKIE, teamId, {
+    ...COOKIE_OPTS,
+    maxAge: 60 * 60 * 24 * 365,
+  })
 }
 
 /**

@@ -12,11 +12,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarOpen } = useUI()
 
   return (
-    <div className="bg-background text-foreground flex min-h-dvh">
-      {/* Desktop sidebar — animates between w-72 (open) and w-14 (collapsed) */}
+    <div className="bg-background text-foreground flex h-dvh overflow-hidden">
+      {/* Desktop sidebar — fixed viewport height, does not scroll with main content */}
       <aside
         className={cn(
-          "border-border/60 hidden shrink-0 flex-col border-r bg-black/25 backdrop-blur-xl lg:flex",
+          "border-border/60 hidden h-full shrink-0 flex-col border-r bg-black/25 backdrop-blur-xl lg:flex",
           "transition-[width] duration-200 ease-in-out",
           sidebarOpen ? "w-72" : "w-14"
         )}
@@ -31,9 +31,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SheetContent>
       </Sheet>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
       </div>
     </div>
   )
