@@ -156,6 +156,34 @@ export async function refreshDataSourceTable(dataSourceId: string, tableId: stri
   return mapTable(data.table)
 }
 
+export type DataSourceTablePreview = {
+  id: string
+  name: string
+  description: string
+  columns: Array<{ name: string; type: string; description?: string }>
+  sampleRows: Record<string, string | number | null>[]
+  rowCount: number
+  previewRowCount: number
+  isLive: boolean
+  snapshotAt?: string | null
+}
+
+export async function fetchDataSourceTablePreview(
+  dataSourceId: string,
+  tableId: string,
+  options?: { live?: boolean }
+): Promise<DataSourceTablePreview> {
+  const params = new URLSearchParams()
+  if (options?.live) params.set("live", "true")
+  const qs = params.toString()
+  const res = await fetch(
+    `/api/data-sources/${dataSourceId}/tables/${tableId}${qs ? `?${qs}` : ""}`,
+    { cache: "no-store" }
+  )
+  const data = await parseJson<{ table: DataSourceTablePreview }>(res)
+  return data.table
+}
+
 export async function uploadExcelToDataSource(dataSourceId: string, file: File): Promise<DataSource> {
   const form = new FormData()
   form.append("file", file)

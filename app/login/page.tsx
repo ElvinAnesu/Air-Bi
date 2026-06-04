@@ -41,9 +41,9 @@ function LoginPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-      const data = await res.json()
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong")
+        setError(data.error ?? `Request failed (${res.status})`)
         return
       }
       router.replace(redirectTo)

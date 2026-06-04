@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "./admin"
-
-export const ACCESS_TOKEN_COOKIE = "sb-access-token"
-export const REFRESH_TOKEN_COOKIE = "sb-refresh-token"
-export const ACTIVE_TEAM_COOKIE = "airbi-active-team-id"
+export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, ACTIVE_TEAM_COOKIE } from "./constants"
 
 /** Cookie options shared between sign-in and sign-out */
 const COOKIE_OPTS = {

@@ -1,19 +1,31 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { getSupabaseEnv } from "./env"
 
 /**
  * Server-only Supabase admin client.
  * Uses the secret key — bypasses Row Level Security.
- * NEVER import this in client components.
+ * NEVER import this in client components or Edge middleware.
  */
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SECRET_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-)
+let adminClient: SupabaseClient | null = null
 
-export { supabaseAdmin }
+export function getSupabaseAdmin(): SupabaseClient {
+  if (!adminClient) {
+    const { url, secretKey } = getSupabaseEnv()
+    adminClient = createClient(url, secretKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  }
+  return adminClient
+}
+
+/** Lazy proxy so importing this module does not require env vars until first use. */
+export const supabaseAdmin: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getSupabaseAdmin()
+    const value = Reflect.get(client, prop, client)
+    return typeof value === "function" ? value.bind(client) : value
+  },
+})

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { getSupabaseEnv } from "./env"
 
 /**
  * Server-side Supabase auth client.
@@ -6,14 +7,7 @@ import { createClient } from "@supabase/supabase-js"
  * Respects Row Level Security — do not use for privileged data access.
  */
 export function createSupabaseAuthClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-
-  if (!url || !publishableKey) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
-    )
-  }
+  const { url, publishableKey } = getSupabaseEnv()
 
   return createClient(url, publishableKey, {
     auth: {
