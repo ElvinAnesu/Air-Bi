@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAuthClient } from "@/lib/supabase/auth-client"
-import {
-  clearAuthCookies,
-  getAccessToken,
-  REFRESH_TOKEN_COOKIE,
-} from "@/lib/supabase/auth"
+import { clearAuthCookies, getAccessToken } from "@/lib/supabase/cookies"
+import { REFRESH_TOKEN_COOKIE } from "@/lib/supabase/constants"
 
 export async function POST(req: NextRequest) {
   const accessToken = getAccessToken(req)

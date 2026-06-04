@@ -5,15 +5,26 @@ import {
   REFRESH_TOKEN_COOKIE,
   ACTIVE_TEAM_COOKIE,
 } from "./constants"
+import {
+  applyRefreshedSessionCookies,
+  clearAuthCookies,
+  getAccessToken,
+  getRefreshToken,
+  setActiveTeamCookie,
+  setAuthCookies,
+} from "./cookies"
+import { isAccessTokenExpired, refreshSessionWithToken } from "./session-refresh"
 
-export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, ACTIVE_TEAM_COOKIE }
-
-/** Cookie options shared between sign-in and sign-out */
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
+export {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  ACTIVE_TEAM_COOKIE,
+  getAccessToken,
+  getRefreshToken,
+  setAuthCookies,
+  clearAuthCookies,
+  setActiveTeamCookie,
+  applyRefreshedSessionCookies,
 }
 
 const UUID_RE =
@@ -25,19 +36,6 @@ export type AuthContext = {
   teamName: string | null
   role: string | null
   subscription: { plan: string; status: string } | null
-}
-
-/**
- * Read the access token from request cookies.
- * Returns null if not present.
- */
-export function getAccessToken(req: NextRequest | Request): string | null {
-  if (req instanceof NextRequest) {
-    return req.cookies.get(ACCESS_TOKEN_COOKIE)?.value ?? null
-  }
-  const cookieHeader = req.headers.get("cookie") ?? ""
-  const match = cookieHeader.match(new RegExp(`${ACCESS_TOKEN_COOKIE}=([^;]+)`))
-  return match ? decodeURIComponent(match[1]) : null
 }
 
 function isValidUuid(value: string | null | undefined): value is string {
@@ -98,15 +96,11 @@ async function resolveTeamForUser(userId: string, req?: NextRequest | Request) {
   }
 }
 
-/**
- * Validate the access token and return the authenticated user + their primary team.
- * Returns null if the token is missing or invalid.
- */
-export async function getAuthUser(req: NextRequest | Request): Promise<AuthContext | null> {
-  const token = getAccessToken(req)
-  if (!token) return null
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token)
+async function buildAuthContextFromAccessToken(
+  accessToken: string,
+  req: NextRequest | Request
+): Promise<AuthContext | null> {
+  const { data, error } = await supabaseAdmin.auth.getUser(accessToken)
   if (error || !data.user) return null
 
   const team = await resolveTeamForUser(data.user.id, req)
@@ -129,34 +123,55 @@ export async function getAuthUser(req: NextRequest | Request): Promise<AuthConte
   }
 }
 
-/**
- * Set auth cookies on a NextResponse.
- */
-export function setAuthCookies(
-  res: NextResponse,
-  accessToken: string,
-  refreshToken: string,
-  expiresIn: number
-) {
-  const maxAge = expiresIn ?? 3600
-  res.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, { ...COOKIE_OPTS, maxAge })
-  res.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, { ...COOKIE_OPTS, maxAge: 60 * 60 * 24 * 30 })
+export type AuthResolution = {
+  auth: AuthContext
+  /** Set to true when tokens were renewed via refresh cookie — attach cookies on the response. */
+  refreshed: boolean
+  session?: {
+    access_token: string
+    refresh_token: string
+    expires_in: number
+  }
 }
 
 /**
- * Clear auth cookies on a NextResponse.
+ * Resolve the current user from cookies, refreshing the session when the access token expired.
  */
-export function clearAuthCookies(res: NextResponse) {
-  res.cookies.set(ACCESS_TOKEN_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 })
-  res.cookies.set(REFRESH_TOKEN_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 })
-  res.cookies.set(ACTIVE_TEAM_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 })
+export async function resolveAuth(req: NextRequest | Request): Promise<AuthResolution | null> {
+  const accessToken = getAccessToken(req)
+  const refreshToken = getRefreshToken(req)
+
+  if (accessToken && !isAccessTokenExpired(accessToken)) {
+    const auth = await buildAuthContextFromAccessToken(accessToken, req)
+    if (auth) return { auth, refreshed: false }
+  }
+
+  if (!refreshToken) return null
+
+  const session = await refreshSessionWithToken(refreshToken)
+  if (!session) return null
+
+  const auth = await buildAuthContextFromAccessToken(session.access_token, req)
+  if (!auth) return null
+
+  return {
+    auth,
+    refreshed: true,
+    session: {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_in: session.expires_in,
+    },
+  }
 }
 
-export function setActiveTeamCookie(res: NextResponse, teamId: string) {
-  res.cookies.set(ACTIVE_TEAM_COOKIE, teamId, {
-    ...COOKIE_OPTS,
-    maxAge: 60 * 60 * 24 * 365,
-  })
+/**
+ * Validate the access token and return the authenticated user + their primary team.
+ * Refreshes automatically when the access token is expired but the refresh token is valid.
+ */
+export async function getAuthUser(req: NextRequest | Request): Promise<AuthContext | null> {
+  const result = await resolveAuth(req)
+  return result?.auth ?? null
 }
 
 /**
@@ -164,8 +179,8 @@ export function setActiveTeamCookie(res: NextResponse, teamId: string) {
  * Returns the auth context or a 401/403 NextResponse.
  */
 export async function requireAuth(req: Request) {
-  const auth = await getAuthUser(req as NextRequest)
-  if (!auth) {
+  const resolved = await resolveAuth(req as NextRequest)
+  if (!resolved) {
     return {
       auth: null,
       errorResponse: NextResponse.json(
@@ -174,6 +189,8 @@ export async function requireAuth(req: Request) {
       ),
     }
   }
+
+  const { auth } = resolved
 
   if (!isValidUuid(auth.teamId)) {
     return {

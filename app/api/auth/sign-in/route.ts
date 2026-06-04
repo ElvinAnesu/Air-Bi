@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAuthClient } from "@/lib/supabase/auth-client"
-import { setAuthCookies } from "@/lib/supabase/auth"
+import { setAuthCookies } from "@/lib/supabase/cookies"
 
 export async function POST(req: NextRequest) {
   try {

@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/supabase/auth"
+import { resolveAuth } from "@/lib/supabase/auth"
+import { applyRefreshedSessionCookies } from "@/lib/supabase/cookies"
 import { canManageBilling } from "@/lib/server/billing/enforce"
 import { resolveEffectivePlan } from "@/lib/server/billing/plans"
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await getAuthUser(req)
-    if (!auth) {
+    const resolved = await resolveAuth(req)
+    if (!resolved) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { auth } = resolved
     const effectivePlan = resolveEffectivePlan(auth.subscription?.plan, auth.subscription?.status)
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       user: {
         id: auth.user.id,
         email: auth.user.email,
@@ -25,6 +27,12 @@ export async function GET(req: NextRequest) {
       effectivePlan,
       canManageBilling: canManageBilling(auth.role),
     })
+
+    if (resolved.refreshed && resolved.session) {
+      applyRefreshedSessionCookies(res, resolved.session)
+    }
+
+    return res
   } catch (err) {
     console.error("[auth/me]", err)
     const message = err instanceof Error ? err.message : "Session check failed"

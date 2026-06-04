@@ -47,7 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me")
+      await fetch("/api/auth/refresh", { method: "POST", credentials: "include" })
+
+      const res = await fetch("/api/auth/me", { credentials: "include" })
       const data = await res.json()
       if (data.user) {
         setUser(data.user)
@@ -78,7 +80,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshAuth])
 
   const signOut = async () => {
-    await fetch("/api/auth/sign-out", { method: "POST" })
+    await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" })
+    setUser(null)
+    setTeamId(null)
+    setTeamName(null)
+    setRole(null)
+    setSubscription(null)
     router.replace("/login")
   }
 
