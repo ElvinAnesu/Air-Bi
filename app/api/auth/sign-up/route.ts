@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getAppBaseUrl } from "@/lib/server/billing/config"
 import { createSupabaseAuthClient } from "@/lib/supabase/auth-client"
 import { setAuthCookies } from "@/lib/supabase/auth"
 
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
       password,
       options: {
         data: { full_name: fullName || email.split("@")[0] },
+        emailRedirectTo: `${getAppBaseUrl()}/login`,
       },
     })
 
@@ -29,22 +31,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    let session = data.session
+    const session = data.session
 
     if (!session) {
-      const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
-        email,
-        password,
+      return NextResponse.json({
+        ok: true,
+        requiresEmailConfirmation: true,
+        message:
+          "Account created. Check your email for a confirmation link before signing in.",
       })
-
-      if (signInError || !signInData.session) {
-        return NextResponse.json(
-          { error: "Account created but sign-in failed. Please sign in manually." },
-          { status: 500 }
-        )
-      }
-
-      session = signInData.session
     }
 
     const res = NextResponse.json({ ok: true, userId: data.user?.id })

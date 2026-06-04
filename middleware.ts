@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { ACCESS_TOKEN_COOKIE } from "@/lib/supabase/constants"
 
 /** Routes that don&apos;t require authentication */
-const PUBLIC_PATHS = ["/login", "/share", "/pricing"]
+const PUBLIC_PATHS = ["/login", "/share", "/pricing", "/auth/reset-password"]
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
