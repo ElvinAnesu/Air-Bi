@@ -29,13 +29,13 @@ function UsageRow({ label, used, limit, limitLabel }: UsageRowProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-white/75">{label}</span>
-        <span className="text-white/45">
+        <span className="text-foreground">{label}</span>
+        <span className="text-muted-foreground">
           {used} / {limitLabel}
         </span>
       </div>
       {limit !== null && (
-        <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+        <div className="bg-muted h-1.5 overflow-hidden rounded-full">
           <div
             className={cn("h-full rounded-full bg-primary transition-all", pct >= 100 && "bg-amber-500")}
             style={{ width: `${pct}%` }}
@@ -152,7 +152,7 @@ export function BillingSettings() {
   return (
     <div className="space-y-6">
       {message && (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
           {message}
         </div>
       )}
@@ -163,28 +163,28 @@ export function BillingSettings() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="rounded-2xl border-white/10 bg-white/[0.03] shadow-none backdrop-blur-md">
+        <Card className="border-border bg-card rounded-2xl shadow-sm">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <CreditCard className="size-4 text-primary" />
+                <CardTitle className="text-card-foreground flex items-center gap-2 text-base">
+                  <CreditCard className="text-primary size-4" />
                   Current plan
                 </CardTitle>
                 <CardDescription>Manage your workspace subscription.</CardDescription>
               </div>
-              <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary dark:text-primary">
                 {billing.subscription.planLabel}
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <p className="text-xs text-muted-foreground">Price</p>
-                <p className="mt-1 text-lg font-semibold">{billing.subscription.price}</p>
+              <div className="border-border bg-muted/50 rounded-xl border p-4">
+                <p className="text-muted-foreground text-xs">Price</p>
+                <p className="text-foreground mt-1 text-lg font-semibold">{billing.subscription.price}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+              <div className="border-border bg-muted/50 rounded-xl border p-4">
                 <p className="text-xs text-muted-foreground">Billing period</p>
                 <p className="mt-1 text-sm font-medium">
                   {billing.subscription.currentPeriodEnd
@@ -213,7 +213,7 @@ export function BillingSettings() {
                     variant="outline"
                     disabled={canceling}
                     onClick={handleCancel}
-                    className="rounded-xl border-white/15"
+                    className="border-border rounded-xl"
                   >
                     {canceling ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                     Cancel subscription
@@ -224,9 +224,9 @@ export function BillingSettings() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-white/10 bg-white/[0.03] shadow-none backdrop-blur-md">
+        <Card className="border-border bg-card rounded-2xl shadow-sm">
           <CardHeader>
-            <CardTitle className="text-base">Usage</CardTitle>
+            <CardTitle className="text-card-foreground text-base">Usage</CardTitle>
             <CardDescription>Track how much of your plan you&apos;re using today.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -276,9 +276,9 @@ export function BillingSettings() {
         </Card>
       </div>
 
-      <Card className="rounded-2xl border-white/10 bg-white/[0.03] shadow-none backdrop-blur-md">
+      <Card className="border-border bg-card rounded-2xl shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Invoice history</CardTitle>
+          <CardTitle className="text-card-foreground text-base">Invoice history</CardTitle>
           <CardDescription>Pesepay payments and plan changes appear here.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -289,7 +289,7 @@ export function BillingSettings() {
               {billing.invoices.map((invoice) => (
                 <div
                   key={invoice.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                  className="border-border bg-muted/40 flex items-center justify-between rounded-xl border px-4 py-3"
                 >
                   <div>
                     <p className="text-sm font-medium">

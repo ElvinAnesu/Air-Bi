@@ -177,7 +177,7 @@ export function SidebarNav({
         )}
       </div>
 
-      <Separator className="bg-white/10" />
+      <Separator className="bg-border" />
 
       {/* ── Nav items ── */}
       <nav className={cn("flex-1 space-y-0.5 overflow-y-auto py-3", collapsed ? "px-1.5" : "px-2")}>
@@ -197,8 +197,8 @@ export function SidebarNav({
                     "flex items-center rounded-xl transition",
                     collapsed ? "justify-center p-2.5" : "gap-2 px-2 py-2",
                     active
-                      ? "bg-primary/15 text-primary ring-1 ring-primary/20 dark:bg-white/[0.08] dark:text-foreground dark:ring-white/10"
-                      : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/[0.05]"
+                      ? "bg-primary/15 text-primary ring-primary/25 font-medium ring-1 dark:bg-primary/20 dark:text-primary dark:ring-primary/30"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.06]"
                   )}
                 >
                   <Icon className={cn("size-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
@@ -211,7 +211,7 @@ export function SidebarNav({
       </nav>
 
       {/* ── Toggle button ── */}
-      <div className={cn("border-t border-white/10 p-2", collapsed && "flex justify-center")}>
+      <div className={cn("border-border border-t p-2", collapsed && "flex justify-center")}>
         <NavTooltip label={collapsed ? "Expand sidebar" : "Collapse sidebar"} collapsed={collapsed}>
           <button
             onClick={toggleSidebar}

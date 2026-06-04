@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar — fixed viewport height, does not scroll with main content */}
       <aside
         className={cn(
-          "border-border/60 hidden h-full shrink-0 flex-col border-r bg-black/25 backdrop-blur-xl lg:flex",
+          "border-border bg-sidebar hidden h-full shrink-0 flex-col border-r lg:flex",
           "transition-[width] duration-200 ease-in-out",
           sidebarOpen ? "w-72" : "w-14"
         )}

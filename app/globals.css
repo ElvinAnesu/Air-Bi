@@ -64,7 +64,7 @@ body {
   --secondary: oklch(0.93 0.010 200);
   --secondary-foreground: oklch(0.20 0.012 255);
   --muted: oklch(0.93 0.010 200);
-  --muted-foreground: oklch(0.44 0.012 250);
+  --muted-foreground: oklch(0.38 0.014 250);
   --accent: oklch(0.91 0.045 193);            /* pale teal accent surface */
   --accent-foreground: oklch(0.25 0.10 193);
   --destructive: oklch(0.577 0.245 27.325);
@@ -102,12 +102,12 @@ body {
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.72 0.12 193);
+  --primary-foreground: oklch(0.12 0.02 193);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted-foreground: oklch(0.78 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
@@ -218,9 +218,28 @@ html:not(.dark) {
   & .text-sky-200      { color: oklch(0.59 0.13 193); }   /* → teal in light */
   & .text-emerald-200  { color: oklch(0.37 0.13 155); }
 
-  /* ── Low-opacity white text ─────────────────────────────────────────── */
+  /* ── Low-opacity white text → readable slate tones ─────────────────── */
   & .text-white\/20    { color: oklch(0.55 0 0); }
+  & .text-white\/45    { color: oklch(0.42 0.012 250); }
+  & .text-white\/60    { color: oklch(0.38 0.012 250); }
+  & .text-white\/70    { color: oklch(0.32 0.012 255); }
+  & .text-white\/75    { color: oklch(0.28 0.012 255); }
+
+  /* ── Alert / status text on light surfaces ─────────────────────────── */
+  & .text-amber-300\/80 { color: oklch(0.42 0.14 65); }
+  & .text-amber-300     { color: oklch(0.42 0.14 65); }
+  & .text-red-300\/80   { color: oklch(0.45 0.18 25); }
+  & .text-red-300       { color: oklch(0.45 0.18 25); }
+  & .text-sky-400\/70   { color: oklch(0.40 0.14 220); }
+
+  /* ── Progress / subtle fills ───────────────────────────────────────── */
+  & .bg-white\/8        { background-color: oklch(0.90 0.006 220); }
 
   /* ── Separator bg-white/10 ──────────────────────────────────────────── */
   & .bg-white\/10 { background-color: oklch(0.87 0.008 220); }
+
+  /* ── Amber warning panels ───────────────────────────────────────────── */
+  & .border-amber-500\/20 { border-color: oklch(0.75 0.12 75); }
+  & .bg-amber-500\/\[0\.06\] { background-color: oklch(0.96 0.04 85); }
+  & .bg-amber-500\/10 { background-color: oklch(0.95 0.05 85); }
 }

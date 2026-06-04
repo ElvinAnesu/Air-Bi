@@ -154,8 +154,8 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
 
       <div
         className={cn(
-          "border border-white/[0.08] bg-black/25 p-2 shadow-none backdrop-blur-md",
-          prominent ? "rounded-[1.35rem]" : "border-border/60 rounded-2xl bg-black/30 shadow-inner"
+          "border-border bg-card text-foreground border p-2 shadow-sm",
+          prominent ? "rounded-[1.35rem]" : "rounded-2xl"
         )}
       >
         {/* Selected table chips */}
@@ -164,7 +164,7 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
             {selectedTables.map((t) => (
               <span
                 key={t.id}
-                className="flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-2 py-1 text-[11px] text-sky-300 ring-1 ring-sky-500/20"
+                className="flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-2 py-1 text-[11px] text-sky-800 ring-1 ring-sky-500/25 dark:text-sky-200"
               >
                 <Database className="size-3 shrink-0" />
                 <span className="font-medium">{t.name}</span>
@@ -191,7 +191,7 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
           }}
           placeholder={prominent ? "Ask anything about your data&hellip;" : "Ask AirBI anything about your ERP data..."}
           className={cn(
-            "resize-none border-0 bg-transparent px-3 py-3 text-[0.9375rem] leading-relaxed shadow-none focus-visible:ring-0",
+            "text-foreground placeholder:text-muted-foreground resize-none border-0 bg-transparent px-3 py-3 text-[0.9375rem] leading-relaxed shadow-none focus-visible:ring-0",
             prominent ? "min-h-[80px] md:min-h-[100px]" : "min-h-[52px] px-2 py-2 text-sm"
           )}
         />
@@ -211,7 +211,7 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
             <Plus className="size-3.5" />
             <span>Add tables</span>
             {selectedTables.length > 0 && (
-              <span className="rounded-md bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+              <span className="rounded-md bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:text-sky-200">
                 {selectedTables.length}
               </span>
             )}

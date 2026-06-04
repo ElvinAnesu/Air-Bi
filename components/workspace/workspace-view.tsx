@@ -282,7 +282,7 @@ export function WorkspaceView({
             </p>
 
             {!activeDataSource && (
-              <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-300/80">
+              <div className="mb-6 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
                 <AlertCircle className="size-4 shrink-0" />
                 No data source selected. Create one from the Data sources page.
               </div>
@@ -304,7 +304,7 @@ export function WorkspaceView({
 
   return (
     <div className="flex h-full gap-0 overflow-hidden">
-      <div className="flex w-[360px] shrink-0 flex-col border-r border-white/[0.06]">
+      <div className="border-border flex w-[360px] shrink-0 flex-col border-r">
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-6 p-4 pb-2">
             {messages.length === 0 && report && (
@@ -326,9 +326,9 @@ export function WorkspaceView({
           </div>
         </ScrollArea>
 
-        <div className="shrink-0 border-t border-white/[0.06] bg-background/80 p-3 backdrop-blur-md">
+        <div className="border-border bg-background/95 shrink-0 border-t p-3 backdrop-blur-md">
           {error && (
-            <div className="mb-2 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-300/80">
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-800 dark:text-red-300">
               <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
               {error}
             </div>
@@ -342,7 +342,7 @@ export function WorkspaceView({
         </div>
       </div>
 
-      <div className="min-w-0 flex-1 overflow-hidden bg-white/[0.01]">
+      <div className="bg-muted/30 min-w-0 flex-1 overflow-hidden">
         <ReportPanel
           report={report}
           loading={reportLoading}

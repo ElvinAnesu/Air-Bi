@@ -36,6 +36,10 @@ function useDarkModeToggle() {
   const [isDark, setIsDark] = useState(true)
 
   useEffect(() => {
+    setIsDark(document.documentElement.classList.contains("dark"))
+  }, [])
+
+  useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark)
   }, [isDark])
 
@@ -71,7 +75,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     : (user?.email?.[0] ?? "?").toUpperCase()
 
   return (
-    <header className="border-border/60 flex h-14 items-center gap-3 border-b bg-black/20 px-3 backdrop-blur-xl md:px-4">
+    <header className="border-border bg-background/95 flex h-14 items-center gap-3 border-b px-3 backdrop-blur-xl md:px-4">
       <Button
         type="button"
         variant="ghost"
@@ -90,7 +94,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <Search className="text-muted-foreground pointer-events-none absolute top-2.5 left-3 size-4" />
         <Input
           placeholder="Search workspaces, tables, and insights"
-          className="h-9 rounded-xl border-white/10 bg-white/[0.04] pl-9 text-xs"
+          className="border-border bg-muted/60 text-foreground placeholder:text-muted-foreground h-9 rounded-xl pl-9 text-xs"
         />
       </div>
       <div className="ml-auto flex items-center gap-1.5">
