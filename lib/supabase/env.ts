@@ -21,7 +21,7 @@ export function getSupabaseEnv(): SupabaseEnv {
     missing.push("SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)")
   }
 
-  if (missing.length > 0) {
+  if (!url || !publishableKey || !secretKey) {
     throw new Error(`Missing Supabase environment variables: ${missing.join(", ")}`)
   }
 

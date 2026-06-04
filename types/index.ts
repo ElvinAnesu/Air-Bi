@@ -17,7 +17,7 @@ export type ErpTable = {
   description: string
   favorite?: boolean
   columns: ErpColumn[]
-  sampleRows: Record<string, string | number>[]
+  sampleRows: Record<string, string | number | null>[]
   relationshipHints?: string[]
 }
 
