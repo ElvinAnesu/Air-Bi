@@ -2,17 +2,18 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/supabase/auth"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
-  captureTableSnapshot,
+  captureAndCleanSnapshot,
   getDataSourceTableRow,
   getTeamDataSourceRow,
   mapDataSourceTableRow,
 } from "@/lib/server/data-sources/repository"
+import type { TableCleaningConfig } from "@/lib/server/data-sources/transforms"
 import type { DbDataSourceRow, DbDataSourceTableRow } from "@/lib/server/data-sources/types"
 
 type Params = { params: Promise<{ id: string; tableId: string }> }
 
 const TABLE_SELECT =
-  "id, data_source_id, external_schema, external_name, display_name, columns_json, sample_rows_json, rows_json, row_count, snapshot_at, created_at"
+  "id, data_source_id, external_schema, external_name, display_name, columns_json, sample_rows_json, rows_json, row_count, snapshot_at, cleaning_config_json, created_at"
 
 export async function POST(req: NextRequest, { params }: Params) {
   const { auth, errorResponse } = await requireAuth(req)
@@ -29,11 +30,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   const dataSource = ds as DbDataSourceRow
 
   try {
-    const snapshot = await captureTableSnapshot(
+    const snapshot = await captureAndCleanSnapshot(
       auth!.teamId!,
       dataSource,
       table.external_schema,
-      table.external_name
+      table.external_name,
+      (table.cleaning_config_json as TableCleaningConfig | null) ?? null
     )
     const now = new Date().toISOString()
 

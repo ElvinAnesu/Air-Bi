@@ -1,6 +1,7 @@
 import type { ComponentType } from "react"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 
 export function EmptyState({
   icon: Icon,
@@ -8,6 +9,7 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  actionHref,
   className,
 }: {
   icon: ComponentType<{ className?: string }>
@@ -15,6 +17,7 @@ export function EmptyState({
   description: string
   actionLabel?: string
   onAction?: () => void
+  actionHref?: string
   className?: string
 }) {
   return (
@@ -29,7 +32,15 @@ export function EmptyState({
       </div>
       <h3 className="text-base font-medium tracking-tight">{title}</h3>
       <p className="text-muted-foreground mt-2 max-w-md text-sm leading-relaxed">{description}</p>
-      {actionLabel && onAction && (
+      {actionLabel && actionHref && (
+        <Link
+          href={actionHref}
+          className={cn(buttonVariants(), "mt-6 rounded-xl")}
+        >
+          {actionLabel}
+        </Link>
+      )}
+      {actionLabel && onAction && !actionHref && (
         <Button type="button" className="mt-6 rounded-xl" onClick={onAction}>
           {actionLabel}
         </Button>

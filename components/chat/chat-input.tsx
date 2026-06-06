@@ -21,16 +21,38 @@ type ChatInputProps = {
   variant?: "default" | "prominent"
   connectionId?: string
   dataSourceId?: string
+  /** When provided, table selection is owned by the parent (persists across messages). */
+  selectedTables?: SelectedTable[]
+  onSelectedTablesChange?: (tables: SelectedTable[]) => void
 }
 
-export function ChatInput({ onSend, disabled, variant = "default", connectionId, dataSourceId }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  variant = "default",
+  connectionId,
+  dataSourceId,
+  selectedTables: selectedTablesProp,
+  onSelectedTablesChange,
+}: ChatInputProps) {
   const [value, setValue] = useState("")
-  const [selectedTables, setSelectedTables] = useState<SelectedTable[]>([])
+  const [internalTables, setInternalTables] = useState<SelectedTable[]>([])
+  const isControlled = selectedTablesProp !== undefined && onSelectedTablesChange !== undefined
+  const selectedTables = isControlled ? selectedTablesProp : internalTables
+
+  const updateSelectedTables = (updater: (prev: SelectedTable[]) => SelectedTable[]) => {
+    if (isControlled && onSelectedTablesChange) {
+      onSelectedTablesChange(updater(selectedTables))
+    } else {
+      setInternalTables(updater)
+    }
+  }
   const [pickerOpen, setPickerOpen] = useState(false)
   const [availableTables, setAvailableTables] = useState<DataSourceTable[]>([])
   const [loadingTables, setLoadingTables] = useState(false)
   const [tableSearch, setTableSearch] = useState("")
   const pickerRef = useRef<HTMLDivElement>(null)
+  const prevSourceRef = useRef<string | null>(null)
 
   const prominent = variant === "prominent"
 
@@ -42,9 +64,15 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
   }
 
   useEffect(() => {
-    setAvailableTables([])
-    setSelectedTables([])
-  }, [dataSourceId, connectionId])
+    const sourceKey = `${dataSourceId ?? ""}:${connectionId ?? ""}`
+    if (prevSourceRef.current !== null && prevSourceRef.current !== sourceKey) {
+      setAvailableTables([])
+      if (!isControlled) {
+        setInternalTables([])
+      }
+    }
+    prevSourceRef.current = sourceKey
+  }, [dataSourceId, connectionId, isControlled])
 
   useEffect(() => {
     const sourceId = dataSourceId ?? connectionId
@@ -74,7 +102,7 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
   )
 
   const toggleTable = (table: DataSourceTable) => {
-    setSelectedTables((prev) => {
+    updateSelectedTables((prev) => {
       const exists = prev.find((t) => t.id === table.id)
       if (exists) return prev.filter((t) => t.id !== table.id)
       return [
@@ -84,7 +112,7 @@ export function ChatInput({ onSend, disabled, variant = "default", connectionId,
     })
   }
 
-  const removeTable = (id: string) => setSelectedTables((prev) => prev.filter((t) => t.id !== id))
+  const removeTable = (id: string) => updateSelectedTables((prev) => prev.filter((t) => t.id !== id))
 
   return (
     <div className="relative" ref={pickerRef}>

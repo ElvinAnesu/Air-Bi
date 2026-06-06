@@ -55,6 +55,21 @@ export type DataSource = {
   updatedAt: string
 }
 
+export type TableCleaningConfig = {
+  transforms: Array<
+    | { op: "rename"; from: string; to: string }
+    | { op: "drop_column"; column: string }
+    | { op: "trim"; column: string }
+    | { op: "filter_empty_rows" }
+    | {
+        op: "filter"
+        column: string
+        operator: "eq" | "neq" | "contains" | "not_empty"
+        value?: string
+      }
+  >
+}
+
 export type DataSourceTable = {
   id: string
   dataSourceId: string
@@ -65,7 +80,24 @@ export type DataSourceTable = {
   sampleRows: Record<string, string | number | null>[]
   rowCount: number
   snapshotAt?: string
+  cleaning?: TableCleaningConfig | null
 }
+
+export type DataSourceRelationship = {
+  id: string
+  dataSourceId: string
+  fromTableId: string
+  fromTableName?: string
+  fromColumn: string
+  toTableId: string
+  toTableName?: string
+  toColumn: string
+  joinType: "inner" | "left"
+  label?: string
+  createdAt: string
+}
+
+export type CatalogTableSummary = SchemaTableSummary & { selected?: boolean }
 
 export type DashboardKpi = {
   id: string

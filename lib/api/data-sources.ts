@@ -1,4 +1,12 @@
-import type { ConnectionStatus, ConnectionType, DataSource, DataSourceTable } from "@/types"
+import type {
+  ConnectionStatus,
+  ConnectionType,
+  DataSource,
+  DataSourceRelationship,
+  DataSourceTable,
+  SchemaTableSummary,
+  TableCleaningConfig,
+} from "@/types"
 
 export type DataSourceCreatePayload = {
   name: string
@@ -38,6 +46,7 @@ type ApiDataSourceTableRow = {
   sampleRows: Record<string, string | number | null>[]
   rowCount: number
   snapshotAt?: string
+  cleaning?: TableCleaningConfig | null
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -76,6 +85,7 @@ function mapTable(row: ApiDataSourceTableRow): DataSourceTable {
     sampleRows: row.sampleRows,
     rowCount: row.rowCount,
     snapshotAt: row.snapshotAt,
+    cleaning: row.cleaning ?? undefined,
   }
 }
 
@@ -122,12 +132,207 @@ export async function fetchDataSourceTables(dataSourceId: string): Promise<DataS
   return (data.tables ?? []).map(mapTable)
 }
 
-export async function fetchAvailableTables(dataSourceId: string) {
-  const res = await fetch(`/api/data-sources/${dataSourceId}/available-tables`, { cache: "no-store" })
-  const data = await parseJson<{
-    tables: Array<{ id: string; name: string; schema: string; description: string }>
-  }>(res)
-  return data.tables ?? []
+export type CatalogSearchResponse = {
+  tables: SchemaTableSummary[]
+  total: number
+  limit: number
+  offset: number
+  sessionId?: string
+  fileName?: string
+}
+
+export async function fetchAvailableTables(
+  dataSourceId: string,
+  options?: { q?: string; limit?: number; offset?: number }
+): Promise<CatalogSearchResponse> {
+  const params = new URLSearchParams()
+  if (options?.q) params.set("q", options.q)
+  if (options?.limit != null) params.set("limit", String(options.limit))
+  if (options?.offset != null) params.set("offset", String(options.offset))
+  const qs = params.toString()
+  const res = await fetch(
+    `/api/data-sources/${dataSourceId}/available-tables${qs ? `?${qs}` : ""}`,
+    { cache: "no-store" }
+  )
+  return parseJson<CatalogSearchResponse>(res)
+}
+
+export async function uploadWizardExcel(
+  file: File,
+  options?: { q?: string; limit?: number; offset?: number }
+): Promise<CatalogSearchResponse & { sessionId: string; fileName: string }> {
+  const form = new FormData()
+  form.append("file", file)
+  if (options?.q) form.append("q", options.q)
+  if (options?.limit != null) form.append("limit", String(options.limit))
+  if (options?.offset != null) form.append("offset", String(options.offset))
+  const res = await fetch("/api/data-sources/wizard/excel-preview", { method: "POST", body: form })
+  return parseJson(res)
+}
+
+export async function searchWizardExcelTables(
+  sessionId: string,
+  options?: { q?: string; limit?: number; offset?: number }
+): Promise<CatalogSearchResponse> {
+  const params = new URLSearchParams({ sessionId })
+  if (options?.q) params.set("q", options.q)
+  if (options?.limit != null) params.set("limit", String(options.limit))
+  if (options?.offset != null) params.set("offset", String(options.offset))
+  const res = await fetch(`/api/data-sources/wizard/excel-tables?${params}`, { cache: "no-store" })
+  return parseJson(res)
+}
+
+export async function searchWizardConnectionTables(
+  connectionId: string,
+  options?: { q?: string; limit?: number; offset?: number; sessionId?: string }
+): Promise<CatalogSearchResponse> {
+  const params = new URLSearchParams({ connectionId })
+  if (options?.q) params.set("q", options.q)
+  if (options?.limit != null) params.set("limit", String(options.limit))
+  if (options?.offset != null) params.set("offset", String(options.offset))
+  if (options?.sessionId) params.set("sessionId", options.sessionId)
+  const res = await fetch(`/api/data-sources/wizard/connection-tables?${params}`, { cache: "no-store" })
+  return parseJson(res)
+}
+
+export type TableCleanPreview = {
+  columns: Array<{ name: string; type: string }>
+  rows: Record<string, string | number | null>[]
+  sampleRows: Record<string, string | number | null>[]
+  rowCount: number
+}
+
+export async function previewWizardClean(payload: {
+  sourceKind: "connection" | "excel"
+  sessionId?: string
+  connectionId?: string
+  externalSchema: string
+  externalName: string
+  cleaning?: TableCleaningConfig | null
+}): Promise<TableCleanPreview> {
+  const res = await fetch("/api/data-sources/wizard/preview-clean", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJson<{ preview: TableCleanPreview }>(res)
+  return data.preview
+}
+
+export async function finalizeWizardDataSource(payload: {
+  name: string
+  description?: string
+  sourceKind: "connection" | "excel"
+  connectionId?: string
+  wizardSessionId?: string
+  tables: Array<{
+    externalSchema: string
+    externalName: string
+    displayName?: string
+    cleaning?: TableCleaningConfig | null
+    preparedColumns?: Array<{ name: string; type: string }>
+    preparedRows?: Record<string, string | number | null>[]
+  }>
+}): Promise<{ source: DataSource; tables: DataSourceTable[] }> {
+  const res = await fetch("/api/data-sources/wizard/finalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  return parseJson(res)
+}
+
+export async function fetchDataSourceRelationships(
+  dataSourceId: string
+): Promise<DataSourceRelationship[]> {
+  const res = await fetch(`/api/data-sources/${dataSourceId}/relationships`, { cache: "no-store" })
+  const data = await parseJson<{ relationships: DataSourceRelationship[] }>(res)
+  return data.relationships ?? []
+}
+
+export async function createDataSourceRelationship(
+  dataSourceId: string,
+  payload: {
+    fromTableId: string
+    fromColumn: string
+    toTableId: string
+    toColumn: string
+    joinType?: "inner" | "left"
+    label?: string
+  }
+): Promise<DataSourceRelationship> {
+  const res = await fetch(`/api/data-sources/${dataSourceId}/relationships`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJson<{ relationship: DataSourceRelationship }>(res)
+  return data.relationship
+}
+
+export async function deleteDataSourceRelationship(
+  dataSourceId: string,
+  relationshipId: string
+): Promise<void> {
+  const params = new URLSearchParams({ relationshipId })
+  const res = await fetch(`/api/data-sources/${dataSourceId}/relationships?${params}`, {
+    method: "DELETE",
+  })
+  await parseJson<{ ok: true }>(res)
+}
+
+export type DataPrepAssistResult =
+  | {
+      type: "clean"
+      message: string
+      tableKey: string
+      cleaning: TableCleaningConfig
+    }
+  | {
+      type: "relationships"
+      message: string
+      suggestions: Array<{
+        fromTableKey: string
+        fromColumn: string
+        toTableKey: string
+        toColumn: string
+        joinType: "inner" | "left"
+        label?: string
+      }>
+    }
+  | { type: "message"; message: string }
+
+export async function runWizardAssist(payload: {
+  task: "clean" | "suggest_relationships"
+  instruction: string
+  tableKey?: string
+  tables: Array<{
+    key: string
+    name: string
+    columns: Array<{ name: string; type: string }>
+    sampleRows: Record<string, string | number | null>[]
+  }>
+}): Promise<DataPrepAssistResult> {
+  const res = await fetch("/api/data-sources/wizard/assist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJson<{ result: DataPrepAssistResult }>(res)
+  return data.result
+}
+
+export async function runDataSourceAssist(
+  dataSourceId: string,
+  payload: { task: "clean" | "suggest_relationships"; instruction: string; tableKey?: string }
+): Promise<DataPrepAssistResult> {
+  const res = await fetch(`/api/data-sources/${dataSourceId}/assist`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJson<{ result: DataPrepAssistResult }>(res)
+  return data.result
 }
 
 export async function addDataSourceTable(

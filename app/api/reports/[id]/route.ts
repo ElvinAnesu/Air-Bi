@@ -41,6 +41,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (body.description !== undefined) updates.description = body.description
   if (body.sql !== undefined) updates.sql = body.sql
   if (body.chartType !== undefined) updates.chart_type = body.chartType
+  if (body.visualization !== undefined) updates.visualization_json = body.visualization
   if (body.columns !== undefined) updates.columns = body.columns
   if (body.rows !== undefined) updates.rows = body.rows
   if (body.rowCount !== undefined) updates.row_count = body.rowCount

@@ -6,9 +6,12 @@ import { useActiveDataSource } from "@/lib/context/active-data-source"
 import { useUI } from "@/lib/context/ui-context"
 import { ChatMessage } from "@/components/chat/chat-message"
 import { ChatInput, type SelectedTable } from "@/components/chat/chat-input"
+import { ChatContextTables } from "@/components/chat/chat-context-tables"
 import { ReportPanel, type ReportData } from "@/components/workspace/report-panel"
+import { ClarifyPromptActions } from "@/components/workspace/clarify-prompt-actions"
+import type { ReportVisualization } from "@/lib/reports/visualization"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Sparkles, AlertCircle } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 
 type ConversationTurn = {
   role: "user" | "assistant"
@@ -57,12 +60,18 @@ export function WorkspaceView({
   )
   const bottomRef = useRef<HTMLDivElement>(null)
   const [greeting, setGreeting] = useState("Welcome")
+  const [awaitingClarify, setAwaitingClarify] = useState(false)
+  const [contextTables, setContextTables] = useState<SelectedTable[]>([])
 
   const showWorkspace = messages.length > 0 || report !== null
 
   useEffect(() => {
     setGreeting(greetingLine())
   }, [])
+
+  useEffect(() => {
+    setContextTables([])
+  }, [activeDataSource?.id])
 
   useEffect(() => {
     if (initialReport) autoCollapse()
@@ -80,6 +89,7 @@ export function WorkspaceView({
             description: reportData.explanation,
             sql: reportData.sql,
             chartType: reportData.chartType,
+            visualization: reportData.visualization,
             columns: reportData.columns,
             rows: reportData.rows,
             rowCount: reportData.rowCount,
@@ -158,8 +168,16 @@ export function WorkspaceView({
         content: trimmed,
       }
 
+      const effectiveTables =
+        selectedTables.length > 0 ? selectedTables : contextTables
+
+      if (selectedTables.length > 0) {
+        setContextTables(selectedTables)
+      }
+
       const nextMessages = [...messages, userMsg]
       setMessages(nextMessages)
+      setAwaitingClarify(false)
       setBusy(true)
       setReportLoading(true)
       autoCollapse()
@@ -176,7 +194,7 @@ export function WorkspaceView({
             message: trimmed,
             dataSourceId: activeDataSource?.id ?? "",
             connectionId: activeDataSource?.connectionId ?? "",
-            selectedTables,
+            selectedTables: effectiveTables,
             conversationHistory: conversationRef.current,
           }),
         })
@@ -187,11 +205,13 @@ export function WorkspaceView({
           title?: string
           explanation?: string
           sql?: string
-          chartType?: "bar" | "pie" | "line" | "table"
+          chartType?: string
+          visualization?: ReportVisualization
           columns?: string[]
           rows?: Record<string, string | number | null>[]
           rowCount?: number
           error?: string
+          canSkip?: boolean
         }
 
         if (!res.ok || data.error) {
@@ -207,14 +227,18 @@ export function WorkspaceView({
           }
           const withAssistant = [...nextMessages, assistantMsg]
           setMessages(withAssistant)
+          setAwaitingClarify(data.canSkip !== false)
           conversationRef.current = [
             ...conversationRef.current,
             { role: "user", content: trimmed },
             { role: "assistant", content: assistantContent },
           ]
           persistChat(withAssistant)
+          setReportLoading(false)
           return
         }
+
+        setAwaitingClarify(false)
 
         const assistantContent = data.explanation ?? "Report generated."
         const assistantMsg: ChatMessageModel = {
@@ -237,6 +261,7 @@ export function WorkspaceView({
           explanation: data.explanation ?? "",
           sql: data.sql ?? "",
           chartType: data.chartType ?? "table",
+          visualization: data.visualization,
           columns: data.columns ?? [],
           rows: data.rows ?? [],
           rowCount: data.rowCount ?? 0,
@@ -263,22 +288,28 @@ export function WorkspaceView({
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
       }
     },
-    [busy, activeDataSource, autoCollapse, messages, persistChat, syncSavedReport]
+    [busy, activeDataSource, autoCollapse, contextTables, messages, persistChat, syncSavedReport]
   )
+
+  const handleSkipClarify = useCallback(() => {
+    const firstUser = messages.find((m) => m.role === "user")
+    const original = firstUser?.content ?? ""
+    void sendPrompt(
+      `Skip clarification questions. Create the best custom report and visuals you can for my original request: "${original}"`,
+      contextTables
+    )
+  }, [messages, contextTables, sendPrompt])
 
   if (!showWorkspace) {
     return (
       <div className="flex h-full flex-col overflow-auto">
         <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-3 md:px-4">
           <div className="flex flex-1 flex-col items-center justify-center px-2 text-center">
-            <div className="mb-6 flex flex-col items-center gap-4 md:flex-row md:gap-5">
-              <Sparkles className="size-9 shrink-0 text-amber-400/90 md:size-10" strokeWidth={1.25} />
-              <h1 className="font-serif text-[1.65rem] font-normal tracking-tight text-foreground md:text-4xl md:leading-tight">
-                {greeting}
-              </h1>
-            </div>
+            <h1 className="font-serif mb-6 text-[1.65rem] font-normal tracking-tight text-foreground md:text-4xl md:leading-tight">
+              {greeting}
+            </h1>
             <p className="text-muted-foreground mb-10 max-w-md text-sm leading-relaxed md:text-[0.9375rem]">
-              Talk to your database in plain language. Add tables as context, ask a question, and AirBI generates a live report.
+              Talk to your data in plain language. AirBI will ask a few quick questions, then build custom visuals—not generic chart templates.
             </p>
 
             {!activeDataSource && (
@@ -288,12 +319,25 @@ export function WorkspaceView({
               </div>
             )}
 
-            <div className="w-full">
+            <div className="w-full space-y-3">
+              {contextTables.length > 0 && (
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5 text-left">
+                  <ChatContextTables
+                    tables={contextTables}
+                    onRemove={(id) =>
+                      setContextTables((prev) => prev.filter((t) => t.id !== id))
+                    }
+                    onClear={() => setContextTables([])}
+                  />
+                </div>
+              )}
               <ChatInput
                 variant="prominent"
                 onSend={sendPrompt}
                 disabled={busy || !activeDataSource}
                 dataSourceId={activeDataSource?.id}
+                selectedTables={contextTables}
+                onSelectedTablesChange={setContextTables}
               />
             </div>
           </div>
@@ -302,9 +346,20 @@ export function WorkspaceView({
     )
   }
 
+  const removeContextTable = (id: string) => {
+    setContextTables((prev) => prev.filter((t) => t.id !== id))
+  }
+
   return (
     <div className="flex h-full gap-0 overflow-hidden">
       <div className="border-border flex w-[360px] shrink-0 flex-col border-r">
+        <div className="border-border/60 shrink-0 border-b px-3 py-2.5">
+          <ChatContextTables
+            tables={contextTables}
+            onRemove={removeContextTable}
+            onClear={() => setContextTables([])}
+          />
+        </div>
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-6 p-4 pb-2">
             {messages.length === 0 && report && (
@@ -315,6 +370,9 @@ export function WorkspaceView({
             {messages.map((m) => (
               <ChatMessage key={m.id} message={m} loading={false} appearance="chat" />
             ))}
+            {awaitingClarify && !busy && (
+              <ClarifyPromptActions disabled={busy} onSkip={handleSkipClarify} />
+            )}
             {busy && (
               <ChatMessage
                 message={{ id: "thinking", role: "assistant", content: "" }}
@@ -338,6 +396,8 @@ export function WorkspaceView({
             onSend={sendPrompt}
             disabled={busy || !activeDataSource}
             dataSourceId={activeDataSource?.id}
+            selectedTables={contextTables}
+            onSelectedTablesChange={setContextTables}
           />
         </div>
       </div>

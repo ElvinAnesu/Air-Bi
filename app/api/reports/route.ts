@@ -22,7 +22,19 @@ export async function POST(req: NextRequest) {
   if (errorResponse) return errorResponse
 
   const body = await req.json()
-  const { title, description, sql, chartType, columns, rows, rowCount, connectionId, dataSourceId, chatId } = body
+  const {
+    title,
+    description,
+    sql,
+    chartType,
+    visualization,
+    columns,
+    rows,
+    rowCount,
+    connectionId,
+    dataSourceId,
+    chatId,
+  } = body
 
   if (!title || !sql) {
     return NextResponse.json({ error: "title and sql are required" }, { status: 400 })
@@ -40,6 +52,7 @@ export async function POST(req: NextRequest) {
       description: description ?? null,
       sql,
       chart_type: chartType ?? "table",
+      visualization_json: visualization ?? null,
       columns: columns ?? [],
       rows: rows ?? [],
       row_count: rowCount ?? 0,

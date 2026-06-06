@@ -69,6 +69,68 @@ export async function listMssqlTables(config: MssqlConnectionConfig): Promise<Sc
   }
 }
 
+function likePattern(q: string): string | null {
+  const trimmed = q.trim()
+  if (!trimmed) return null
+  const escaped = trimmed.replace(/[%_]/g, (c) => `[${c}]`)
+  return `%${escaped}%`
+}
+
+export async function searchMssqlTables(
+  config: MssqlConnectionConfig,
+  options: { q: string; limit: number; offset: number }
+): Promise<{ tables: SchemaTableSummary[]; total: number; limit: number; offset: number }> {
+  const pool = await sql.connect(poolConfig(config))
+  const pattern = likePattern(options.q)
+  try {
+    const baseWhere = `
+      TABLE_TYPE = 'BASE TABLE'
+      AND TABLE_SCHEMA NOT IN ('sys', 'INFORMATION_SCHEMA')
+    `
+    const searchWhere = pattern
+      ? `${baseWhere} AND (TABLE_SCHEMA LIKE @pattern OR TABLE_NAME LIKE @pattern)`
+      : baseWhere
+
+    const countReq = pool.request()
+    if (pattern) countReq.input("pattern", sql.NVarChar, pattern)
+    const countResult = await countReq.query<{ cnt: number }>(`
+      SELECT COUNT(*) AS cnt
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE ${searchWhere}
+    `)
+
+    const dataReq = pool
+      .request()
+      .input("offset", sql.Int, options.offset)
+      .input("limit", sql.Int, options.limit)
+    if (pattern) dataReq.input("pattern", sql.NVarChar, pattern)
+
+    const result = await dataReq.query<{ schema: string; name: string }>(`
+      SELECT TABLE_SCHEMA AS [schema], TABLE_NAME AS [name]
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE ${searchWhere}
+      ORDER BY TABLE_SCHEMA, TABLE_NAME
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `)
+
+    const tables = result.recordset.map((row) => ({
+      id: `${row.schema}.${row.name}`,
+      schema: row.schema,
+      name: row.name,
+      description: `${row.schema}.${row.name}`,
+    }))
+
+    return {
+      tables,
+      total: Number(countResult.recordset[0]?.cnt ?? 0),
+      limit: options.limit,
+      offset: options.offset,
+    }
+  } finally {
+    await pool.close()
+  }
+}
+
 function assertSafeSqlIdentifier(value: string, label: string) {
   if (!/^[a-zA-Z0-9_]+$/.test(value)) {
     throw new Error(`Invalid ${label}`)

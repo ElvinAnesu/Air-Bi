@@ -1,7 +1,30 @@
+import {
+  isEffectivelyZero,
+  numericEquals,
+  parseLocaleNumber,
+} from "@/lib/server/query/numeric"
+
+export type TabularFilterOp =
+  | "eq"
+  | "contains"
+  | "gt"
+  | "lt"
+  | "gte"
+  | "lte"
+  | "numeric_eq"
+  | "numeric_neq"
+  | "numeric_zero"
+  | "numeric_gt"
+  | "numeric_gte"
+  | "numeric_lt"
+  | "numeric_lte"
+  | "is_empty"
+  | "is_not_empty"
+
 export type TabularFilter = {
   column: string
-  op: "eq" | "contains" | "gt" | "lt" | "gte" | "lte"
-  value: string | number
+  op: TabularFilterOp
+  value?: string | number
 }
 
 export type TabularAggregation = {
@@ -20,27 +43,70 @@ export type TabularQuery = {
   select?: string[]
 }
 
+function compareNumeric(
+  raw: string | number | null,
+  cmp: string | number,
+  op: "gt" | "lt" | "gte" | "lte"
+): boolean {
+  const a = parseLocaleNumber(raw)
+  const b = parseLocaleNumber(cmp)
+  if (a === null || b === null) return false
+  switch (op) {
+    case "gt":
+      return a > b
+    case "lt":
+      return a < b
+    case "gte":
+      return a >= b
+    case "lte":
+      return a <= b
+  }
+}
+
 function applyFilter(
   row: Record<string, string | number | null>,
   filter: TabularFilter
 ): boolean {
   const raw = row[filter.column]
-  const value = raw === null || raw === undefined ? "" : raw
-  const cmp = filter.value
+  const isEmpty = raw === null || raw === undefined || String(raw).trim() === ""
 
   switch (filter.op) {
-    case "eq":
-      return String(value).toLowerCase() === String(cmp).toLowerCase()
+    case "is_empty":
+      return isEmpty
+    case "is_not_empty":
+      return !isEmpty
+    case "numeric_zero":
+      return isEffectivelyZero(raw)
+    case "numeric_eq":
+      return filter.value !== undefined && numericEquals(raw, filter.value)
+    case "numeric_neq":
+      return filter.value !== undefined && !numericEquals(raw, filter.value)
+    case "numeric_gt":
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "gt")
+    case "numeric_gte":
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "gte")
+    case "numeric_lt":
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "lt")
+    case "numeric_lte":
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "lte")
+    case "eq": {
+      if (filter.value === undefined) return true
+      const asNum = parseLocaleNumber(filter.value)
+      const cellNum = parseLocaleNumber(raw)
+      if (asNum !== null && cellNum !== null) return numericEquals(raw, filter.value)
+      return String(raw ?? "").toLowerCase() === String(filter.value).toLowerCase()
+    }
     case "contains":
-      return String(value).toLowerCase().includes(String(cmp).toLowerCase())
+      if (filter.value === undefined) return true
+      return String(raw ?? "").toLowerCase().includes(String(filter.value).toLowerCase())
     case "gt":
-      return Number(value) > Number(cmp)
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "gt")
     case "lt":
-      return Number(value) < Number(cmp)
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "lt")
     case "gte":
-      return Number(value) >= Number(cmp)
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "gte")
     case "lte":
-      return Number(value) <= Number(cmp)
+      return filter.value !== undefined && compareNumeric(raw, filter.value, "lte")
     default:
       return true
   }
@@ -74,15 +140,17 @@ function aggregateRows(
 
       if (agg.fn === "count") out[alias] = groupRows.length
       else if (agg.fn === "sum")
-        out[alias] = values.reduce<number>((sum, value) => sum + Number(value), 0)
-      else if (agg.fn === "avg")
-        out[alias] = values.length
-          ? values.reduce<number>((sum, value) => sum + Number(value), 0) / values.length
-          : 0
-      else if (agg.fn === "min")
-        out[alias] = values.length ? Math.min(...values.map(Number)) : null
-      else if (agg.fn === "max")
-        out[alias] = values.length ? Math.max(...values.map(Number)) : null
+        out[alias] = values.reduce<number>((sum, value) => sum + (parseLocaleNumber(value) ?? 0), 0)
+      else if (agg.fn === "avg") {
+        const nums = values.map((v) => parseLocaleNumber(v)).filter((n): n is number => n !== null)
+        out[alias] = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0
+      } else if (agg.fn === "min") {
+        const nums = values.map((v) => parseLocaleNumber(v)).filter((n): n is number => n !== null)
+        out[alias] = nums.length ? Math.min(...nums) : null
+      } else if (agg.fn === "max") {
+        const nums = values.map((v) => parseLocaleNumber(v)).filter((n): n is number => n !== null)
+        out[alias] = nums.length ? Math.max(...nums) : null
+      }
     }
     result.push(out)
   }
@@ -114,9 +182,11 @@ export function executeTabularQuery(
     working.sort((a, b) => {
       const av = a[column]
       const bv = b[column]
+      const an = parseLocaleNumber(av)
+      const bn = parseLocaleNumber(bv)
       const cmp =
-        typeof av === "number" && typeof bv === "number"
-          ? av - bv
+        an !== null && bn !== null
+          ? an - bn
           : String(av ?? "").localeCompare(String(bv ?? ""))
       return direction === "desc" ? -cmp : cmp
     })

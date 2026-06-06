@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import type { DataSource, DataSourceTable, ErpTable, SchemaTableSummary } from "@/types"
+import type { DataSource, DataSourceTable, ErpTable } from "@/types"
 import {
   addDataSourceTable,
-  fetchAvailableTables,
   fetchDataSource,
   fetchDataSourceTablePreview,
   fetchDataSourceTables,
@@ -13,6 +12,11 @@ import {
   removeDataSourceTable,
   uploadExcelToDataSource,
 } from "@/lib/api/data-sources"
+import { DataSourceRelationshipsPanel } from "@/components/data-sources/data-source-relationships"
+import {
+  TableCatalogPicker,
+  type SelectedCatalogTable,
+} from "@/components/data-sources/wizard/table-catalog-picker"
 import { TableDetailView } from "@/components/database/table-detail-view"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,7 +37,8 @@ import {
 export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string }) {
   const [source, setSource] = useState<DataSource | null>(null)
   const [tables, setTables] = useState<DataSourceTable[]>([])
-  const [available, setAvailable] = useState<SchemaTableSummary[]>([])
+  const [detailTab, setDetailTab] = useState<"tables" | "relationships">("tables")
+  const [addSelected, setAddSelected] = useState<SelectedCatalogTable[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
@@ -59,14 +64,12 @@ export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string })
     setLoading(true)
     setError(null)
     try {
-      const [ds, tbls, avail] = await Promise.all([
+      const [ds, tbls] = await Promise.all([
         fetchDataSource(dataSourceId),
         fetchDataSourceTables(dataSourceId),
-        fetchAvailableTables(dataSourceId).catch(() => []),
       ])
       setSource(ds)
       setTables(tbls)
-      setAvailable(avail)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data source")
     } finally {
@@ -117,18 +120,23 @@ export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string })
     }
   }, [tables, selectedTableId, loadPreview])
 
-  const handleAdd = async (table: SchemaTableSummary) => {
-    setAdding(table.id)
+  const handleAddSelected = async () => {
+    if (addSelected.length === 0) return
+    setAdding("batch")
+    setError(null)
     try {
-      await addDataSourceTable(dataSourceId, {
-        externalSchema: table.schema,
-        externalName: table.schema === "smartsheet" ? table.id : table.name,
-        displayName: table.name,
-      })
-      await load()
+      for (const table of addSelected) {
+        await addDataSourceTable(dataSourceId, {
+          externalSchema: table.schema,
+          externalName: table.externalName,
+          displayName: table.displayName,
+        })
+      }
+      setAddSelected([])
       setAddSheetOpen(false)
+      await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add table")
+      setError(err instanceof Error ? err.message : "Failed to add tables")
     } finally {
       setAdding(null)
     }
@@ -304,6 +312,26 @@ export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string })
             </Button>
           </>
         )}
+        <div className="flex gap-1 rounded-xl border border-white/12 p-0.5">
+          <Button
+            type="button"
+            size="sm"
+            variant={detailTab === "tables" ? "default" : "ghost"}
+            className="rounded-lg text-xs"
+            onClick={() => setDetailTab("tables")}
+          >
+            Tables
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={detailTab === "relationships" ? "default" : "ghost"}
+            className="rounded-lg text-xs"
+            onClick={() => setDetailTab("relationships")}
+          >
+            Relationships
+          </Button>
+        </div>
         <Button
           type="button"
           variant="outline"
@@ -320,6 +348,9 @@ export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string })
         <p className="text-destructive border-border/60 shrink-0 border-b px-4 py-2 text-sm">{error}</p>
       )}
 
+      {detailTab === "relationships" ? (
+        <DataSourceRelationshipsPanel dataSourceId={dataSourceId} tables={tables} />
+      ) : (
       <div className="flex min-h-0 flex-1">
         <div className="hidden lg:flex">{tablesSidebar}</div>
 
@@ -431,15 +462,16 @@ export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string })
           </div>
         </div>
       </div>
+      )}
 
       <Sheet open={addSheetOpen} onOpenChange={setAddSheetOpen}>
         <SheetContent side="right" className="w-full max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add tables</SheetTitle>
           </SheetHeader>
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 space-y-4">
             <p className="text-muted-foreground text-xs">
-              Browse available tables from {catalogName} and add them to this data source.
+              Search and select tables from {catalogName} to add to this data source.
             </p>
             {source.sourceKind === "excel" && !source.excelFileName && (
               <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-200/80">
@@ -447,29 +479,28 @@ export function DataSourceDetailView({ dataSourceId }: { dataSourceId: string })
                 Upload an Excel file first.
               </div>
             )}
-            {available.length === 0 && source.excelFileName && (
-              <p className="text-muted-foreground text-sm">All available tables have been added.</p>
-            )}
-            {available.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{t.name}</p>
-                  <p className="text-muted-foreground truncate text-xs">{t.description}</p>
-                </div>
+            {(source.sourceKind === "connection" || source.excelFileName) && (
+              <>
+                <TableCatalogPicker
+                  selected={addSelected}
+                  onSelectionChange={setAddSelected}
+                  loadCatalog={async ({ q, limit, offset }) => {
+                    const { fetchAvailableTables } = await import("@/lib/api/data-sources")
+                    const res = await fetchAvailableTables(dataSourceId, { q, limit, offset })
+                    return { tables: res.tables, total: res.total }
+                  }}
+                />
                 <Button
                   type="button"
-                  size="sm"
-                  className="shrink-0 rounded-xl"
-                  disabled={adding === t.id}
-                  onClick={() => void handleAdd(t)}
+                  className="w-full rounded-xl"
+                  disabled={adding !== null || addSelected.length === 0}
+                  onClick={() => void handleAddSelected()}
                 >
-                  {adding === t.id ? <Loader2 className="size-3.5 animate-spin" /> : "Add"}
+                  {adding ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                  Add {addSelected.length} table{addSelected.length === 1 ? "" : "s"}
                 </Button>
-              </div>
-            ))}
+              </>
+            )}
           </div>
         </SheetContent>
       </Sheet>

@@ -3,18 +3,11 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import type { DataSource } from "@/types"
-import {
-  createDataSource,
-  deleteDataSource,
-  fetchDataSources,
-} from "@/lib/api/data-sources"
-import { fetchConnections } from "@/lib/api/connections"
-import type { ErpConnection } from "@/types"
+import { deleteDataSource, fetchDataSources } from "@/lib/api/data-sources"
+import { useDataSourceWizard } from "@/lib/context/data-source-wizard-context"
 import { EmptyState } from "@/components/layout/empty-state"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -27,27 +20,19 @@ import { Badge } from "@/components/ui/badge"
 import { ChevronRight, Database, FileSpreadsheet, Loader2, Plus, Trash2 } from "lucide-react"
 
 export function DataSourcesView() {
+  const { setSetupDialogOpen } = useDataSourceWizard()
   const [items, setItems] = useState<DataSource[]>([])
-  const [connections, setConnections] = useState<ErpConnection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DataSource | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [form, setForm] = useState({
-    name: "",
-    kind: "connection" as "connection" | "excel",
-    connectionId: "",
-  })
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [sources, conns] = await Promise.all([fetchDataSources(), fetchConnections()])
+      const sources = await fetchDataSources()
       setItems(sources)
-      setConnections(conns)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data sources")
       setItems([])
@@ -59,26 +44,6 @@ export function DataSourcesView() {
   useEffect(() => {
     void load()
   }, [load])
-
-  const handleCreate = async () => {
-    if (!form.name.trim()) return
-    setCreating(true)
-    setError(null)
-    try {
-      await createDataSource({
-        name: form.name.trim(),
-        sourceKind: form.kind,
-        connectionId: form.kind === "connection" ? form.connectionId : undefined,
-      })
-      setCreateOpen(false)
-      setForm({ name: "", kind: "connection", connectionId: "" })
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create data source")
-    } finally {
-      setCreating(false)
-    }
-  }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -111,7 +76,7 @@ export function DataSourcesView() {
             Curate the tables and sheets your team uses for reporting and chat.
           </p>
         </div>
-        <Button className="rounded-xl" onClick={() => setCreateOpen(true)}>
+        <Button type="button" className="rounded-xl" onClick={() => setSetupDialogOpen(true)}>
           <Plus className="mr-2 size-4" />
           New data source
         </Button>
@@ -127,9 +92,9 @@ export function DataSourcesView() {
         <EmptyState
           icon={Database}
           title="No data sources yet"
-          description="Create a data source from a connection or upload an Excel file, then manually add the tables you want to use."
+          description="Create a data source from a connection or Excel file. Select tables, clean data, and define relationships in one guided flow."
           actionLabel="Create data source"
-          onAction={() => setCreateOpen(true)}
+          onAction={() => setSetupDialogOpen(true)}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -190,87 +155,6 @@ export function DataSourcesView() {
           ))}
         </div>
       )}
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="rounded-2xl border-white/15 bg-zinc-950">
-          <DialogHeader>
-            <DialogTitle>New data source</DialogTitle>
-            <DialogDescription>
-              Link a live connection or create an Excel-based data source. You&apos;ll add tables manually after creation.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="ds-name">Name</Label>
-              <Input
-                id="ds-name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Sales reporting"
-                className="rounded-xl border-white/12 bg-black/30"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={form.kind === "connection" ? "default" : "outline"}
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={() => setForm((f) => ({ ...f, kind: "connection" }))}
-                >
-                  From connection
-                </Button>
-                <Button
-                  type="button"
-                  variant={form.kind === "excel" ? "default" : "outline"}
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={() => setForm((f) => ({ ...f, kind: "excel" }))}
-                >
-                  Excel upload
-                </Button>
-              </div>
-            </div>
-            {form.kind === "connection" && (
-              <div className="space-y-2">
-                <Label htmlFor="ds-conn">Connection</Label>
-                <select
-                  id="ds-conn"
-                  value={form.connectionId}
-                  onChange={(e) => setForm((f) => ({ ...f, connectionId: e.target.value }))}
-                  className="border-input bg-background h-10 w-full rounded-xl border px-3 text-sm"
-                >
-                  <option value="">Select a connection</option>
-                  {connections.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.connectionType})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" className="rounded-xl" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="rounded-xl"
-              disabled={
-                creating ||
-                !form.name.trim() ||
-                (form.kind === "connection" && !form.connectionId)
-              }
-              onClick={handleCreate}
-            >
-              {creating && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent className="rounded-2xl border-white/15 bg-zinc-950">

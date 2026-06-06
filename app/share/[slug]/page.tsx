@@ -10,6 +10,7 @@ type PublicReport = {
   title: string
   description: string | null
   chartType: string
+  visualization?: ReportData["visualization"]
   columns: string[]
   rows: Record<string, string | number | null>[]
   rowCount: number
@@ -59,7 +60,8 @@ export default function PublicReportPage() {
     title: report.title,
     explanation: report.description ?? "",
     sql: "",
-    chartType: report.chartType as ReportData["chartType"],
+    chartType: report.chartType,
+    visualization: report.visualization,
     columns: report.columns,
     rows: report.rows,
     rowCount: report.rowCount,

@@ -19,7 +19,8 @@ export type SavedReport = {
   title: string
   description: string
   sql: string
-  chartType: "bar" | "pie" | "line" | "table"
+  chartType?: string
+  visualization?: import("@/lib/reports/visualization").ReportVisualization
   columns: string[]
   rows: Record<string, string | number | null>[]
   rowCount: number

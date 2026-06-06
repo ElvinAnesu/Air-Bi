@@ -9,6 +9,7 @@ import { getMssqlTablePreview } from "@/lib/server/mssql/client"
 import { getSmartsheetSheetData } from "@/lib/server/smartsheet/client"
 import { parseExcelSheet } from "@/lib/server/excel/parser"
 import type { ErpColumn, ConnectionStatus } from "@/types"
+import { applyCleaningTransforms, type TableCleaningConfig } from "@/lib/server/data-sources/transforms"
 import type {
   DataSourceKind,
   DataSourceTableSnapshot,
@@ -41,13 +42,14 @@ export type DataSourceTableModel = {
   sampleRows: Record<string, string | number | null>[]
   rowCount: number
   snapshotAt?: string
+  cleaning?: TableCleaningConfig | null
 }
 
 const DATA_SOURCE_SELECT =
   "id, team_id, created_by, name, description, source_kind, connection_id, excel_file_name, excel_storage_path, created_at, updated_at"
 
 const TABLE_SELECT =
-  "id, data_source_id, external_schema, external_name, display_name, columns_json, sample_rows_json, rows_json, row_count, snapshot_at, created_at"
+  "id, data_source_id, external_schema, external_name, display_name, columns_json, sample_rows_json, rows_json, row_count, snapshot_at, cleaning_config_json, created_at"
 
 export function mapDataSourceRow(
   row: DbDataSourceRow,
@@ -85,6 +87,24 @@ export function mapDataSourceTableRow(row: DbDataSourceTableRow): DataSourceTabl
     sampleRows: Array.isArray(row.sample_rows_json) ? row.sample_rows_json : [],
     rowCount: row.row_count ?? 0,
     snapshotAt: row.snapshot_at ?? undefined,
+    cleaning: row.cleaning_config_json ?? undefined,
+  }
+}
+
+export async function captureAndCleanSnapshot(
+  teamId: string,
+  dataSource: DbDataSourceRow,
+  externalSchema: string,
+  externalName: string,
+  cleaning?: TableCleaningConfig | null
+): Promise<DataSourceTableSnapshot> {
+  const snapshot = await captureTableSnapshot(teamId, dataSource, externalSchema, externalName)
+  const cleaned = applyCleaningTransforms(snapshot.columns, snapshot.rows, cleaning)
+  return {
+    columns: cleaned.columns,
+    sampleRows: cleaned.rows.slice(0, 10),
+    rows: cleaned.rows,
+    rowCount: cleaned.rows.length,
   }
 }
 

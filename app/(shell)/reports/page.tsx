@@ -106,7 +106,7 @@ export default function ReportsPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <Badge variant="outline" className="text-[10px] capitalize">
-                          {report.chart_type}
+                          {report.chart_type === "table" ? "Custom views" : report.chart_type.replace(/_/g, " ")}
                         </Badge>
                         <Button
                           variant="ghost"

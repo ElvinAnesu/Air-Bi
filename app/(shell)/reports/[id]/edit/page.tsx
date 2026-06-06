@@ -16,6 +16,7 @@ type ApiReport = {
   description: string | null
   sql: string
   chart_type: string
+  visualization_json?: unknown
   columns: string[]
   rows: Record<string, string | number | null>[]
   row_count: number
@@ -120,7 +121,8 @@ export default function EditReportPage() {
     title: report.title,
     explanation: report.description ?? "",
     sql: report.sql,
-    chartType: report.chart_type as ReportData["chartType"],
+    chartType: report.chart_type,
+    visualization: report.visualization_json as ReportData["visualization"],
     columns: report.columns,
     rows: report.rows,
     rowCount: report.row_count,
